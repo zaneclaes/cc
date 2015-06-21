@@ -1,0 +1,32 @@
+<html>
+  <head>
+    <title><%= user.get('name') %> | ContentCarousel</title>
+    <% include head %>
+  </head>
+  <body>
+    <% include bar %>
+    <div class="container">
+      ::before
+      <div class="page-header" id="banner">
+        <div class="row-fluid">
+          <h1>Submit Content</h1>
+          <div class="span4">
+            Submit your content to gain exposure.
+            <br>
+            <a href="random">Roll</a> through the site and resubmit or share other users' content to gain influence, which will make your content appear more often.
+          </div>
+          <br>
+          <div class="span8">
+            <form action="submit" method="POST" enctype="application/x-www-form-urlencoded" >
+              <div class="form-group">
+                <label for="url">URL</label>
+                <input type="text" class="form-control" id="url" name="url" placeholder="URL">
+              </div>
+              <button type="submit" class="btn btn-primary">Submit</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

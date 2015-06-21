@@ -1,0 +1,21 @@
+<html>
+  <head>
+    <title><%= user.get('name') %> | ContentCarousel</title>
+    <% include head %>
+  </head>
+  <body>
+    <% include bar %>
+    <div class="container">
+      ::before
+      <div class="page-header" id="banner">
+        <div class="row">
+          <h1><%= user.get('name') %></h1>
+          <p><%= user.get('alias') %></p>
+          <% if(me){ %>
+            <a href="logout">Logout</a>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

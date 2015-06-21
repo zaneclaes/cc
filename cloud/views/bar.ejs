@@ -1,0 +1,26 @@
+<div class="navbar navbar-default navbar-fixed-top">
+      <div class="container">
+        <div class="navbar-header">
+          <a href="http://contentcarousel.com/" class="navbar-brand">ContentCarousel</a>
+        </div>
+        <div class="navbar-collapse collapse" id="navbar-main">
+          <ul class="nav navbar-nav">
+          </ul>
+
+          <ul class="nav navbar-nav navbar-right">
+            <li class="dropdown">
+              <a class="dropdown-toggle" data-toggle="dropdown" href="random" id="themes">Random</span></a>
+            </li>
+            <li class="dropdown">
+              <a class="dropdown-toggle" data-toggle="dropdown" href="submit" id="themes">Submit</span></a>
+            </li>
+            <% if(user){ %>
+            <li><a href="me" ><img width="24" height="24" src="http://graph.facebook.com/<%= user.get('alias') %>/picture"></a></li>
+            <% } else { %>
+            <li><a href="me" >Log In</a></li>
+            <% } %>
+          </ul>
+
+        </div>
+      </div>
+    </div>

@@ -1,0 +1,15 @@
+{
+    "applications": {
+        "ContentCarousel": {
+            "applicationId": "WSwi6L48zYirNxfnPjPcUOSJCcdwHYgadtfqxWAC", 
+            "masterKey": "sunqnS89E8zMuf5Vb9ptAtjF93qedg9ydPofUxlh",
+            "javascriptKey": "GLLItWpGEJBOOr9AQdRixSgUAcV0d8V97s3gHlHf"
+        }, 
+        "_default": {
+            "link": "ContentCarousel"
+        }
+    }, 
+    "global": {
+        "parseVersion": "1.3.1"
+    }
+}

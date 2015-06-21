@@ -1,0 +1,55 @@
+0 info it worked if it ends with ok
+1 verbose cli [ 'node',
+1 verbose cli   '/usr/local/bin/npm',
+1 verbose cli   'install',
+1 verbose cli   '-g',
+1 verbose cli   'https://github.com/flovilmart/parse-env' ]
+2 info using npm@1.4.28
+3 info using node@v0.10.32
+4 verbose cache add [ 'https://github.com/flovilmart/parse-env', null ]
+5 verbose cache add name=undefined spec="https://github.com/flovilmart/parse-env" args=["https://github.com/flovilmart/parse-env",null]
+6 verbose parsed url { protocol: 'https:',
+6 verbose parsed url   slashes: true,
+6 verbose parsed url   auth: null,
+6 verbose parsed url   host: 'github.com',
+6 verbose parsed url   port: null,
+6 verbose parsed url   hostname: 'github.com',
+6 verbose parsed url   hash: null,
+6 verbose parsed url   search: null,
+6 verbose parsed url   query: null,
+6 verbose parsed url   pathname: '/flovilmart/parse-env',
+6 verbose parsed url   path: '/flovilmart/parse-env',
+6 verbose parsed url   href: 'https://github.com/flovilmart/parse-env' }
+7 silly lockFile 5a47f7ca--github-com-flovilmart-parse-env https://github.com/flovilmart/parse-env
+8 verbose lock https://github.com/flovilmart/parse-env /Users/zane/.npm/5a47f7ca--github-com-flovilmart-parse-env.lock
+9 verbose addRemoteTarball [ 'https://github.com/flovilmart/parse-env', null ]
+10 info retry fetch attempt 1 at 18:20:16
+11 verbose fetch to= /var/folders/s_/9v750_vs1ql7ftn5zq8cn9y80000gn/T/npm-19359-GIfnCeN2/github.com/flovilmart/parse-env
+12 http GET https://github.com/flovilmart/parse-env
+13 http 200 https://github.com/flovilmart/parse-env
+14 verbose tar unpack /var/folders/s_/9v750_vs1ql7ftn5zq8cn9y80000gn/T/npm-19359-GIfnCeN2/github.com/flovilmart/parse-env
+15 silly lockFile d65c8831--com-flovilmart-parse-env-unpack tar:///var/folders/s_/9v750_vs1ql7ftn5zq8cn9y80000gn/T/npm-19359-GIfnCeN2/github.com/flovilmart/parse-env-unpack
+16 verbose lock tar:///var/folders/s_/9v750_vs1ql7ftn5zq8cn9y80000gn/T/npm-19359-GIfnCeN2/github.com/flovilmart/parse-env-unpack /Users/zane/.npm/d65c8831--com-flovilmart-parse-env-unpack.lock
+17 silly lockFile 03f1744b--github-com-flovilmart-parse-env tar:///var/folders/s_/9v750_vs1ql7ftn5zq8cn9y80000gn/T/npm-19359-GIfnCeN2/github.com/flovilmart/parse-env
+18 verbose lock tar:///var/folders/s_/9v750_vs1ql7ftn5zq8cn9y80000gn/T/npm-19359-GIfnCeN2/github.com/flovilmart/parse-env /Users/zane/.npm/03f1744b--github-com-flovilmart-parse-env.lock
+19 silly gunzTarPerm modes [ '755', '644' ]
+20 error not a package /var/folders/s_/9v750_vs1ql7ftn5zq8cn9y80000gn/T/npm-19359-GIfnCeN2/github.com/flovilmart/parse-env
+21 silly lockFile d65c8831--com-flovilmart-parse-env-unpack tar:///var/folders/s_/9v750_vs1ql7ftn5zq8cn9y80000gn/T/npm-19359-GIfnCeN2/github.com/flovilmart/parse-env-unpack
+22 silly lockFile d65c8831--com-flovilmart-parse-env-unpack tar:///var/folders/s_/9v750_vs1ql7ftn5zq8cn9y80000gn/T/npm-19359-GIfnCeN2/github.com/flovilmart/parse-env-unpack
+23 silly lockFile 03f1744b--github-com-flovilmart-parse-env tar:///var/folders/s_/9v750_vs1ql7ftn5zq8cn9y80000gn/T/npm-19359-GIfnCeN2/github.com/flovilmart/parse-env
+24 silly lockFile 03f1744b--github-com-flovilmart-parse-env tar:///var/folders/s_/9v750_vs1ql7ftn5zq8cn9y80000gn/T/npm-19359-GIfnCeN2/github.com/flovilmart/parse-env
+25 silly lockFile 5a47f7ca--github-com-flovilmart-parse-env https://github.com/flovilmart/parse-env
+26 silly lockFile 5a47f7ca--github-com-flovilmart-parse-env https://github.com/flovilmart/parse-env
+27 error Error: ENOENT, open '/var/folders/s_/9v750_vs1ql7ftn5zq8cn9y80000gn/T/npm-19359-GIfnCeN2/github.com/flovilmart/parse-env-unpack/package.json'
+28 error If you need help, you may report this *entire* log,
+28 error including the npm and node versions, at:
+28 error     <http://github.com/npm/npm/issues>
+29 error System Darwin 14.3.0
+30 error command "node" "/usr/local/bin/npm" "install" "-g" "https://github.com/flovilmart/parse-env"
+31 error cwd /Users/zane/Sites/ContentCarousel
+32 error node -v v0.10.32
+33 error npm -v 1.4.28
+34 error path /var/folders/s_/9v750_vs1ql7ftn5zq8cn9y80000gn/T/npm-19359-GIfnCeN2/github.com/flovilmart/parse-env-unpack/package.json
+35 error code ENOENT
+36 error errno 34
+37 verbose exit [ 34, true ]
