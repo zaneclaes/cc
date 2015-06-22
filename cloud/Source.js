@@ -1,16 +1,25 @@
-var Content = require('cloud/Content'),
-		CCHttp = require('cloud/libs/CCHttp'),
+var CCHttp = require('cloud/libs/CCHttp'),
 		CCObject = require('cloud/libs/CCObject'),
 		CCOpQueue = require('cloud/libs/CCOpQueue').OpQueue,
-		Prismatic = require('cloud/FeedPrismatic'),
-		Rss = require('cloud/FeedRSS');
+		Content = require('cloud/Content'),
+		Prismatic = require('cloud/SourcePrismatic'),
+		Rss = require('cloud/SourceRSS');
+
+// The types of sources which result in content
+exports.CONTENT_SOURCE_TYPES = ['rss','prismatic'];
+
+var Source = Parse.Object.extend("Source", {
+
+}, {
+
+});
 
 //
-// Ingest a single feed (i.e., rss or prismatic)
+// Ingest a single source (i.e., rss or prismatic)
 //
-exports.ingestFeed = function(feedObj, options) {
-	type = feedObj.get('type');
-	options.feed = feedObj;
+exports.ingestSource = function(source, options) {
+	type = source.get('type');
+	options.source = source;
 	if (type === 'prismatic') {
 		Prismatic.ingest(options);
 	}
@@ -24,7 +33,7 @@ exports.ingestFeed = function(feedObj, options) {
 };
 
 //
-// Ingest all feeds
+// Ingest all sources
 //
 exports.ingest = function(options) {
 	var ingesting = 1,
@@ -40,7 +49,7 @@ exports.ingest = function(options) {
 					options.success(results);
 				}
 			},
-			onFeedComplete = {
+			onSourceComplete = {
 				success: function() {
 					results.ingested++;
 					onIngested();
@@ -50,21 +59,21 @@ exports.ingest = function(options) {
 					onIngested();
 				}
 			},
-			query = new Parse.Query("Feeds");
-	if (options.feedNames && options.feedNames.length) {
-		query.containedIn("type",options.feedNames);
+			query = new Parse.Query(Source);
+	if (options.sourceNames && options.sourceNames.length) {
+		query.containedIn("type",options.sourceNames);
 	}
 	query.find({
-		success: function(feeds) {
-			CCObject.log('feed query found '+feeds.length);
+		success: function(sources) {
+			CCObject.log('sources query found '+sources.length);
 			var queue = new CCOpQueue();
 			queue.displayName = 'Ingestion';
 			queue.maxConcurrentOps = 1; // Serial progression with ingestion, so we don't collide on content.
-			for (var i=0; i<feeds.length; i++) {
+			for (var i=0; i<sources.length; i++) {
 				queue.queueOp({
-					feed: feeds[i],
+					source: sources[i],
 					run: function(op, options) {
-						exports.ingestFeed(op.feed, options);
+						exports.ingestSource(op.source, options);
 					}
 				});
 			}
@@ -77,3 +86,5 @@ exports.ingest = function(options) {
 	})
 
 }
+
+exports.Source = Source;

@@ -1,10 +1,26 @@
-var Content = require('cloud/Content').Content,
-		URLShortener = require('cloud/libs/URLShortener'),
-    OpQueue = require('cloud/libs/CCOpQueue').OpQueue,
-		CCObject = require('cloud/libs/CCObject');
+var 
+    CCObject = require('cloud/libs/CCObject');
+    URLShortener = require('cloud/libs/URLShortener'),
+    Content = require('cloud/Content').Content,
+    OpQueue = require('cloud/libs/CCOpQueue').OpQueue;
 
 var StreamItem = Parse.Object.extend("StreamItem", {
 	// @Instance
+
+  /**
+   * Pass a StreamItem through a JSON parser to get a simple hash
+   * Then delete extra data that we don't want to send down
+   * (trim the pipe bandwidth)
+   */
+  render: function() {
+    var item = JSON.parse(JSON.stringify(this));
+    delete item.holdDate;
+    delete item.operations;
+    delete item.relationship;
+    delete item.matches;
+    delete item.status;
+    return item;
+  },
 
 	/**
 	 * Before Save
@@ -52,7 +68,6 @@ var StreamItem = Parse.Object.extend("StreamItem", {
   // 
   // Takes an object (Either Content or...?)
   // 
-  //
   factory: function(stream, objects, options) {
     var map = {},
         query = new Parse.Query(StreamItem);
@@ -106,7 +121,9 @@ var StreamItem = Parse.Object.extend("StreamItem", {
 
   // 
   // Takes an object (Either Content or...?)
-  // 
+  // The object has exportToStreamItem(stream) called on it
+  // Do any setup there
+  // This is just for automatic (relationship) stuff
   //
   _factory: function(stream, o) {
   	var item = o.exportToStreamItem(stream),

@@ -45,8 +45,8 @@ function extractTags(item, options) {
 // Ingest prismatic
 //
 exports.ingest = function(options) {
-	var settings = options.feed.get('settings'),
-			feedId = options.feed.id,
+	var settings = options.source.get('settings'),
+			sourceId = options.source.id,
 			maxPages = settings.pages || 1,
 			allObjs = options.allObjs || [],
 			curPage = options.curPage || 0,
@@ -68,7 +68,7 @@ exports.ingest = function(options) {
 	CCHttp.httpCachedRequest({
 		url: urlBase + token,
 		headers: headers,
-		key: feedId,
+		key: sourceId,
 		cacheName: 'Prismatic',
 		cacheValidation: function(obj) {
 			return obj.docs ? true : false;
@@ -80,9 +80,9 @@ exports.ingest = function(options) {
 			for (var x in items) {
 				lastItem = items[x];
 				contentMap[lastItem['url']] = {
-					'feedType' : 'prismatic',
-					'feedId' : feedId,
-					'weight' : options.feed.get('weight') || 100,
+					'sourceType' : 'prismatic',
+					'sourceId' : sourceId,
+					'weight' : options.source.get('weight') || 100,
 					'title' : lastItem['title'],
 					'publisher' : lastItem['publisher'],
 					'text' : lastItem['text'],
@@ -92,7 +92,7 @@ exports.ingest = function(options) {
 					//'payload' : lastItem,
 				};
 			}
-			CCObject.log('got prismatic content map page '+curPage+' from feedId '+feedId);
+			CCObject.log('got prismatic content map page '+curPage+' from sourceId '+sourceId);
 			CCObject.log(contentMap);
 			Content.factory(contentMap, options);
 		},

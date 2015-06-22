@@ -1,25 +1,26 @@
 var isLocal = typeof __dirname !== 'undefined',
     root = isLocal ? './' : 'cloud/',    
-    Ingestion = require('cloud/Ingestion'),
-    OpQueue = require('cloud/libs/CCOpQueue').OpQueue,
-    CCObject = require('cloud/libs/CCObject'),
     Analyzer = require('cloud/libs/Analyzer'),
-    StreamItem = require('cloud/StreamItem').StreamItem,
+    CCObject = require('cloud/libs/CCObject'),
     Content = require('cloud/Content').Content,
-    Stream = require('cloud/Stream').Stream;
+    Delta = require('cloud/Delta').Delta,
+    Source = require('cloud/Source'),
+    OpQueue = require('cloud/libs/CCOpQueue').OpQueue,
+    Stream = require('cloud/Stream').Stream,
+    StreamItem = require('cloud/StreamItem').StreamItem;
 
 /*************************************************************************************
 * Public API [Endpoints]
  ************************************************************************************/
 var express = require('express'),
     app = express(),
-    apiRegex = '/api/v[0-9\.]{1,3}/',
+    apiRegex = '/api/v[0-9]{1}/',
     objectIdRegex = '[a-zA-Z0-9]{8,12}'; // I think this is always 10, but left some fudge
 
 app.use(function(req, res, next) {
 	var vparts = req.url.match(apiRegex),
-			vstr = vparts.length > 0 ? vparts[0] : '/v0.1/';
-	req.apiVersion = parseFloat(vstr.substring(2));
+			vstr = vparts.length > 0 ? vparts[0] : '/v1/';
+	req.apiVersion = parseInt(vstr.substring(2));
 	next();
 });
 
@@ -89,7 +90,7 @@ Parse.Cloud.job("ingest", function(request, status) {
 	var startTime = new Date().getTime();
 	status.message('ingesting...');
 	Parse.Cloud.useMasterKey();
-  Ingestion.ingest({	
+  Source.ingest({	
     success: function(res) {
     	status.success('ingested in '+(((new Date).getTime() - startTime)/1000) + 'sec');
     },
@@ -120,3 +121,4 @@ Parse.Cloud.beforeSave("Content", function(request, response) {
 Parse.Cloud.beforeSave("StreamItem", function(request, response) {
 	request.object.finalize(response);
 });
+

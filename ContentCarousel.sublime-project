@@ -1,0 +1,14 @@
+{
+	"folders":
+	[
+		{
+			"path": "cloud"
+		},
+		{
+			"path": "config"
+		},
+		{
+			"path": "public"
+		}
+	]
+}

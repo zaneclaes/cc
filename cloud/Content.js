@@ -1,8 +1,7 @@
-
-var CCHttp = require('cloud/libs/CCHttp'),
+var Analyzer = require('cloud/libs/Analyzer'),
+    CCHttp = require('cloud/libs/CCHttp'),
     CCObject = require('cloud/libs/CCObject'),
-    OpQueue = require('cloud/libs/CCOpQueue').OpQueue,
-    Analyzer = require('cloud/libs/Analyzer');
+    OpQueue = require('cloud/libs/CCOpQueue').OpQueue;
 
 // globally applied to clicks to compute score as compared to shares
 // i.e., how many shares is a single click thru the CC system worth?
@@ -23,18 +22,23 @@ var Content = Parse.Object.extend("Content", {
     var StreamItem = Parse.Object.extend("StreamItem"), // IMPORTANT : can't require due to include recursion
         item = new StreamItem(),
         keys = { // What goes to StreamItem? localKey => remoteKey
-          'url' : 'url',
-          'title' : 'title',
-          'tags' : 'tags',
           'images' : 'images',
-          'text' : 'text',
-          'source' : 'source',
+          'publisher' : 'publisher',
           'score' : 'score',
-        };
+          'tags' : 'tags',
+          'text' : 'text',
+          'title' : 'title',
+          'url' : 'url',
+          'host' : 'host',
+        },
+        matchRegex = new RegExp(stream.getSearchRegexStr(), 'gi');
     for (var k in keys) {
       item.set(keys[k], this.get(k));
     }
     item.set('shortcode',(new Date()).toISOString().slice(0,10)+'-'+CCObject.canonicalTag(this.get('name')));
+
+    var matches = CCObject.arrayUnion([matchRegex],this.get('canonicalSearchString').match(matchRegex));
+    item.set('matches', matches);
     return item;
   },
 
@@ -51,9 +55,9 @@ var Content = Parse.Object.extend("Content", {
    * Based on everything we know, compute a score for a Content object
    * We do this by normalizing the score on "shares" (i.e., how much is
    * each thing we know worth, in terms of shares?) and then multiplying
-   * that by a per-content weight (which comes from the feed) implying
+   * that by a per-content weight (which comes from the source) implying
    * how confident we are that this is a good item (i.e., representational
-   * of feed health/quality or other quantitative quality metrics)
+   * of source health/quality or other quantitative quality metrics)
    *
    * TODO: this should be stream-specific; i.e., clicks should feed from a stream
    * maybe we take the stream in as a param here, and use it when feeding a stream into
@@ -208,7 +212,7 @@ var Content = Parse.Object.extend("Content", {
   // @Class
 
   // Known keys...
-  _keys: ['url','title','tags','images','publisher','text','payload','source','timestamp','feedType','feedId','weight'],
+  _keys: ['url','title','tags','images','publisher','text','payload','timestamp','sourceType','sourceId','weight'],
 
   // 
   // Takes a map of URLs => what we know about them
@@ -264,18 +268,19 @@ var Content = Parse.Object.extend("Content", {
     var content = new Content(),
         canonicalTags = CCObject.canonicalArray(obj.tags),
         canonicalTitle = CCObject.canonicalTag(obj.title),
-        sources = url.match(/^(?:https?:\/\/)?(?:www\.)?([^\/]+)/i), // 
-        source = sources.length >= 1 ? sources[0] : ''; // http://www.xxx.yyy
+        domains = url.match(/^(?:https?:\/\/)?(?:www\.)?([^\/]+)/i), // 
+        parts = domains.length >= 1 ? domains[0].split('.') : [''],
+        host = parts.slice(1).join('.');
+
+    canonicalTags.push(canonicalTitle);
 
     content.assign(obj);
-    content.set('source',source);
+    content.set('host', host);
     content.set('name', canonicalTitle.replace(/\s/g,'-').toLowerCase());
-    content.set('canonicalSearchString', ','+canonicalTags.join(',')+','+canonicalTitle+',');
+    content.set('canonicalSearchString', ','+canonicalTags.join(',')+',');
     content.set('url', url);
     return content;
   },
-
-
   //
   // Finds Content objects that need analysis, and does it.
   //

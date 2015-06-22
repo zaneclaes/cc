@@ -88,8 +88,8 @@ function normalizeImages(images) {
  * if it is a query-type object (which searches on topics)
  * Thus this function gets called for each feed.
  */
-exports.ingestRssUrl = function(rssUrl, feed, options) {
-  var settings = feed.get('settings'),
+exports.ingestRssUrl = function(rssUrl, source, options) {
+  var settings = source.get('settings'),
   		url = 'https://ajax.googleapis.com/ajax/services/feed/load?v=1.0&q=' + encodeURIComponent(rssUrl);
   //obj.responseData.feed.[entries|feedUrl|title|link|author|description|type]
   //entry[title|link|author|publishedDate|contentSnippet|categories|mediaGroups]
@@ -120,9 +120,9 @@ exports.ingestRssUrl = function(rssUrl, feed, options) {
 				}
 
 				contentMap[url] = {
-					'feedType' : 'rss',
-					'feedId' : feed.id,
-					'weight' : feed.get('weight') || 1,
+					'sourceType' : 'rss',
+					'sourceId' : source.id,
+					'weight' : source.get('weight') || 1,
 					'title' : lastEntry['title'],
 					'publisher' : { 'title' : lastEntry['author'] },
 					'text' : lastEntry['contentSnippet'],
@@ -159,9 +159,9 @@ exports.ingestRssQuery = function(query, options) {
 				var entry = obj.responseData.entries[e];//url, title, contentSnippet, link
 				var op = q.queueOp({
 					url: entry.url,
-					feed: options.feed,
+					source: options.source,
 					run: function(op, options) {
-						exports.ingestRssUrl(op.url, op.feed, options);
+						exports.ingestRssUrl(op.url, op.source, options);
 					}
 				});
 			}
@@ -177,14 +177,14 @@ exports.ingestRssQuery = function(query, options) {
   });
 }
 /**
- * Settings for this feed:
+ * Settings for this source:
  * Either a "url" or a "query"
  * A query is expensive and will spawn many URL based ingestions
  */
 exports.ingest = function(options) {
-	var settings = options.feed.get('settings');
+	var settings = options.source.get('settings');
   if (settings.url && settings.url.length) {
-		exports.ingestRssUrl(settings.url, options.feed, options);
+		exports.ingestRssUrl(settings.url, options.source, options);
   }
   else if(settings.query && settings.query.length) {
   	exports.ingestRssQuery(settings.query, options);

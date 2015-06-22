@@ -1,7 +1,13 @@
-var Content = require('cloud/Content').Content,
-    StreamItem = require('cloud/StreamItem').StreamItem,
-		CCObject = require('cloud/libs/CCObject'),
-    OpQueue = require('cloud/libs/CCOpQueue').OpQueue;
+var CCObject = require('cloud/libs/CCObject'),
+    Content = require('cloud/Content').Content,
+    Delta = require('cloud/Delta').Delta,
+    OpQueue = require('cloud/libs/CCOpQueue').OpQueue,
+    StreamItem = require('cloud/StreamItem').StreamItem;
+
+/**
+ * Max age for content, if maxContentAge not specified by the stream
+ */
+var DEFAULT_MAX_CONTENT_AGE = 1000 * 60 * 60 * 24 * 7;
 
 var Stream = Parse.Object.extend("Stream", {
   // @Instance
@@ -20,6 +26,7 @@ var Stream = Parse.Object.extend("Stream", {
         var query = new Parse.Query(StreamItem);
         query.equalTo('streamId',self.id);
         query.lessThan('holdDate',new Date());
+        query.notContainedIn('status',['rejected']);
         query.limit(options.limit);
         query.skip(options.offset);
         query.descending('createdAt');
@@ -27,7 +34,7 @@ var Stream = Parse.Object.extend("Stream", {
           success: function(items) {
             var res = [];
             for (var i in items) {
-              res.push(self.renderItem(items[i]));
+              res.push(items[i].render());
             }
             options.success(res);
           },
@@ -39,20 +46,7 @@ var Stream = Parse.Object.extend("Stream", {
   },
 
   /**
-   * Pass a StreamItem through a JSON parser to get a simple hash
-   * Then delete extra data that we don't want to send down
-   * (trim the pipe bandwidth)
-   */
-  renderItem: function(item) {
-    var item = JSON.parse(JSON.stringify(item));
-    delete item.holdDate;
-    delete item.operations;
-    delete item.relationship;
-    return item;
-  },
-
-  /**
-   * Fills up the stream with new StreamItem objects
+   * Fills up the stream with new StreamItem objects by calling fetchDeltas
    *
    * @return an array of StreamItem objects
    */
@@ -77,99 +71,33 @@ var Stream = Parse.Object.extend("Stream", {
           }
           finalCallback(allItems);
         };
-        self.fetch(options);
+        self.fetchDeltas(options);
       },
       error: options.error,
     });
   },
 
   /**
-   * Fetches posts for the stream from the Content table
-   * Moves them into the StreamItem table
-   *
-   * @return An array of StreamItem objects
+   * Find deltas which feed this stream and fetch (populate) them
    */
-  fetch: function(options) {
+  fetchDeltas: function(options) {
     var self = this,
-        query = new Parse.Query(Content),
-        offset = options.offset || 0,
-        limit = options.limit || this.inferFetchLimit(),
-        oneDay = 1000 * 60 * 60 * 24,
-        publishedDate = options.publishedDate || new Date(new Date().getTime() - (oneDay * 2)),
-        velocity = options.velocity || 0,
-        shares = options.shares || 0,
-        inclusions = CCObject.canonicalArray(this.get('interests')),
-        exclusions = CCObject.canonicalArray(this.get('exclusions')),
-        blacklist = this.get('blacklist'),
-        feedIds = this.get('feedIds'),
-        feedTypes = this.get('feedTypes'),
-        contentTypes = this.get('contentTypes'),
-        inclRegex = inclusions.length > 0 ? '(' + inclusions.join('|') + ')' : '',
-        exclRegex = exclusions.length > 0 ? '((?!' + exclusions.join('|') + ').)*' : '',
-        blackRegex = blacklist.length > 0 ? '((?!' + blacklist.join('|') + ').)*' : '',
-        searchRegex = '^' + exclRegex + inclRegex + exclRegex + '$',
-        log = [];
-
-    // Date range for CREATION (this preventns de-dupe)
-    if (options.startDate) {
-      query.greaterThan('createdAt',options.startDate);
-      log.push('createdAt > ' + options.startDate.getTime());
-    }
-    if (options.endDate) {
-      query.lessThan('createdAt',options.endDate);
-      log.push('createdAt < ' + options.startDate.getTime());
-    }
-    // Date range for PUBLICATION (how recent we want our news)
-    if (publishedDate) {
-      query.greaterThan('publishedDate', publishedDate);
-      log.push('publishedDate < ' + publishedDate.getTime());
-    }
-    // Constrain to a specific feed id/type
-    if (feedIds && feedIds.length) {
-      query.containedIn('feedId',feedIds);
-      log.push('feedId [] ' + feedIds.join(','));
-    }
-    if (feedTypes && feedTypes.length) {
-      query.containedIn('feedType',feedTypes);
-      log.push('feedType [] ' + feedTypes.join(','));
-    }
-    // Specific content types
-    if (contentTypes && contentTypes.length) {
-      query.containedIn('type',contentTypes);
-      log.push('type [] ' + contentTypes.join(','));
-    }
-    // Do not include content without images, or NSFW
-    query.notEqualTo('images',[]);
-    query.exists('images');
-    query.exists('name');
-    query.equalTo('nsfw',false);
-    // Social velocity filters
-    if (velocity || shares) {
-      query.greaterThanOrEqualTo('fbShareVelocity',velocity);
-      log.push('fbShareVelocity >= ' + velocity);
-      query.greaterThanOrEqualTo('fbShares',shares);
-      log.push('fbShares >= ' + shares);
-    }
-    if (searchRegex.length > 2) {
-      log.push('canonicalSearchString :: ' + searchRegex);
-      query.matches('canonicalSearchString', searchRegex, 'i');
-    }
-    if (blacklist && blacklist.length) {
-      // Filter certain domains
-      query.notContainedIn('source',blacklist);
-      log.push('source !![] ' + blacklist.join(','));
-    }
-    // Order, offset, etc.
-    query.limit(limit);
-    query.skip(offset);
-    query.descending('score'); // createdAt??
-    // Main search string filters
-    CCObject.log('[Stream] search: '+log.join(' | '),2);
+        query = new Parse.Query(Delta);
+    query.equalTo('streamId',this.id);
     query.find({
-      success: function(contents) {
-        CCObject.log('[Stream] found content: '+contents.length);
-        StreamItem.factory(self, contents, options);
-      },
+      success: function(deltas) {
+        var ops = new OpQueue();
+        ops.displayName = 'fetchDeltas';
+        for (var d in deltas) {
+          ops.queueOp({
+            delta: deltas[d],
+            run: function(op, options) {
+              op.delta.fetch(self, options);
+            }
+          });
+        }//for
+        ops.run(options.success);
+      },// success
       error: options.error
     });
   },
