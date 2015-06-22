@@ -1,5 +1,5 @@
 var isLocal = typeof __dirname !== 'undefined',
-    root = isLocal ? './' : 'cloud/',    
+    root = isLocal ? './' : 'cloud/',
     Analyzer = require('cloud/libs/Analyzer'),
     CCObject = require('cloud/libs/CCObject'),
     Content = require('cloud/Content').Content,
@@ -32,7 +32,9 @@ app.get(apiRegex + objectIdRegex, function(request, response) {
 		success: function(items) {
 			response.json(items);
 		},
-		error: response.error
+		error: function(e) {
+      response.json({'error': e});
+    },
 	});
 });
 
@@ -88,7 +90,7 @@ Parse.Cloud.define("tag", function(request, response) {
 // Get a content by a given objectId or name
 Parse.Cloud.define("item", function(request, response) {
 	var query = new Parse.Query(StreamItem);
-	
+
 	if (request.params.id && request.params.id.length) {
 		query.equalTo('objectId', request.params.id);
 	}
@@ -106,7 +108,7 @@ Parse.Cloud.job("ingest", function(request, status) {
 	var startTime = new Date().getTime();
 	status.message('ingesting...');
 	Parse.Cloud.useMasterKey();
-  Source.ingest({	
+  Source.ingest({
     success: function(res) {
     	status.success('ingested in '+(((new Date).getTime() - startTime)/1000) + 'sec');
     },

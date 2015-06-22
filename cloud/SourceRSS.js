@@ -11,7 +11,7 @@ var globalBlacklist = [
 	'reddit', 'kickstarter', 'feedsportal', 'instructables',
 ];
 
-/** 
+/**
  * Turn Google RSS image styles into the database style we use
  [
   {
@@ -120,8 +120,7 @@ exports.ingestRssUrl = function(rssUrl, source, options) {
 				}
 
 				contentMap[url] = {
-					'sourceType' : 'rss',
-					'sourceId' : source.id,
+          'source' : source,
 					'weight' : source.get('weight') || 1,
 					'title' : lastEntry['title'],
 					'publisher' : { 'title' : lastEntry['author'] },

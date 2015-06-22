@@ -117,8 +117,8 @@ var Delta = Parse.Object.extend("Delta", {
       for(var s in sources) {
         sourceIds.push(sources[s].id);
       }
-      query.containedIn('sourceIds',sourceIds);
-      log.push('sources [] ' + sources.length);
+      query.containedIn('source',sources);
+      log.push('sources [] ' + sourceIds.length);
     }
     // Specific content types
     if (contentTypes && contentTypes.length) {
@@ -173,10 +173,8 @@ var Delta = Parse.Object.extend("Delta", {
    * Return a regex string for the stream
    */
   getSearchRegexStr: function() {
-    var
-        inclusions = CCObject.canonicalArray(this.get('interests')),
-        exclusions = CCObject.canonicalArray(this.get('exclusions')),
-        inclRegex = inclusions.length > 0 ? '(' + inclusions.join('|') + ')' : '',
+    var exclusions = CCObject.canonicalArray(this.get('exclusions')),
+        inclRegex = this.getSearchInclusionsRegexStr(),
         exclRegex = exclusions.length > 0 ? '((?!' + exclusions.join('|') + ').)*' : '';
 
     if (inclRegex.length) {
@@ -188,6 +186,11 @@ var Delta = Parse.Object.extend("Delta", {
     else {
       return false;
     }
+  },
+
+  getSearchInclusionsRegexStr: function() {
+    var inclusions = CCObject.canonicalArray(this.get('interests'));
+    return inclusions.length > 0 ? '(' + inclusions.join('|') + ')' : '';
   },
 
 }, {

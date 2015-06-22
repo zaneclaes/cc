@@ -80,8 +80,7 @@ exports.ingest = function(options) {
 			for (var x in items) {
 				lastItem = items[x];
 				contentMap[lastItem['url']] = {
-					'sourceType' : 'prismatic',
-					'sourceId' : sourceId,
+					'source' : options.source,
 					'weight' : options.source.get('weight') || 100,
 					'title' : lastItem['title'],
 					'publisher' : lastItem['publisher'],

@@ -31,14 +31,16 @@ var Content = Parse.Object.extend("Content", {
           'url' : 'url',
           'host' : 'host',
         },
-        matchRegex = new RegExp(delta.getSearchRegexStr(), 'gi');
+        matchRegex = delta.getSearchInclusionsRegexStr(),
+        matches = (this.get('canonicalSearchString') || '').match(new RegExp(matchRegex, 'gi')),
+        matchCount =  matches && matches.length > 0 ? matches.length : 1;
     for (var k in keys) {
       item.set(keys[k], this.get(k));
     }
-    item.set('shortcode',(new Date()).toISOString().slice(0,10)+'-'+CCObject.canonicalTag(this.get('name')));
-
-    var matches = CCObject.arrayUnion([matchRegex],this.get('canonicalSearchString').match(matchRegex));
-    item.set('matches', matches);
+    item.set('score', matchCount * matchCount * item.get('score'));
+    item.set('shortcode',(new Date()).toISOString().slice(0,10)+'-'+CCObject.canonicalTag(this.get('title')));
+    item.set('matches', CCObject.arrayUnion([matchRegex],matches));
+    item.set('matchCount', matchCount);
     return item;
   },
 
@@ -222,7 +224,7 @@ var Content = Parse.Object.extend("Content", {
   // @Class
 
   // Known keys...
-  _keys: ['url','title','tags','images','publisher','text','payload','timestamp','sourceType','sourceId','weight'],
+  _keys: ['url','title','tags','images','publisher','text','payload','timestamp','source','weight'],
 
   //
   // Takes a map of URLs => what we know about them
