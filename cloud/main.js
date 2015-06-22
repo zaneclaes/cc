@@ -19,20 +19,36 @@ var express = require('express'),
 
 app.use(function(req, res, next) {
 	var vparts = req.url.match(apiRegex),
-			vstr = vparts.length > 0 ? vparts[0] : '/v1/';
+			vstr = vparts && vparts.length > 0 ? vparts[0] : '/v1/';
 	req.apiVersion = parseInt(vstr.substring(2));
 	next();
 });
 
 // GET /stream/:id
-app.get(apiRegex + 'stream/' + objectIdRegex, function(request, response) {
+app.get(apiRegex + objectIdRegex, function(request, response) {
 	var parts = request.url.split('/');
-	request.params.streamId = parts[4];
+	request.params.streamId = parts[3];
 	Stream.stream(request.params, {
 		success: function(items) {
 			response.json(items);
 		},
 		error: response.error
+	});
+});
+
+// Content lookup.
+app.get('/' + objectIdRegex + '/[0-9]{4}[/\-][0-9]{2}[/\-][0-9]{2}[/\-][a-zA-Z0-9\-]*', function(request, response) {
+	var parts = request.url.split('/');
+	parts.shift();
+	var streamId = parts.shift();
+	console.log(parts);
+	var query = new Parse.Query(StreamItem);
+	query.equalTo('shortcode', parts.join('/'));
+	query.first({
+		success: function(item) {
+			response.json(item);
+		},
+		error: response.error,
 	});
 });
 

@@ -18,7 +18,7 @@ var Content = Parse.Object.extend("Content", {
    * Used by the StreamItem._factory
    * (where more data is added)
    */
-  exportToStreamItem: function(stream) {
+  exportToStreamItem: function(delta) {
     var StreamItem = Parse.Object.extend("StreamItem"), // IMPORTANT : can't require due to include recursion
         item = new StreamItem(),
         keys = { // What goes to StreamItem? localKey => remoteKey
@@ -31,7 +31,7 @@ var Content = Parse.Object.extend("Content", {
           'url' : 'url',
           'host' : 'host',
         },
-        matchRegex = new RegExp(stream.getSearchRegexStr(), 'gi');
+        matchRegex = new RegExp(delta.getSearchRegexStr(), 'gi');
     for (var k in keys) {
       item.set(keys[k], this.get(k));
     }

@@ -54,7 +54,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
 			if (Object.keys(ops).indexOf('shorten')>=0) {
 				var shortened = q.results[opMap['shorten']];
 				if (shortened) {
-					self.set('shortened',shortened.data.url);
+					self.set('url',shortened.data.url);
 				}
 			}
 			self.set('operations',{});
@@ -68,7 +68,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
   // 
   // Takes an object (Either Content or...?)
   // 
-  factory: function(stream, objects, options) {
+  factory: function(delta, objects, options) {
     var map = {},
         query = new Parse.Query(StreamItem);
     for (var o in objects) {
@@ -79,7 +79,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
     var relationships = Object.keys(map);
 
     query.containedIn("relationship", relationships);
-    query.equalTo('streamId',stream.id);
+    query.equalTo('deltaId',delta.id);
     query.find({
       success: function(items) {
         CCObject.log('[ItemFactory] found item matches: '+items.length);
@@ -94,7 +94,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
             built[relationship] = item;
           }
           else {
-            built[relationship] = StreamItem._factory(stream, map[relationship]); 
+            built[relationship] = StreamItem._factory(delta, map[relationship]); 
             if (built[relationship]) {
             	toSave.push(built[relationship]);
             }
@@ -102,7 +102,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
         }
         for (var r in relationships) {
           var relationship = relationships[r];
-          built[relationship] = StreamItem._factory(stream, map[relationship]); 
+          built[relationship] = StreamItem._factory(delta, map[relationship]); 
           if (built[relationship]) {
 	          toSave.push(built[relationship]);
 	        }
@@ -125,17 +125,18 @@ var StreamItem = Parse.Object.extend("StreamItem", {
   // Do any setup there
   // This is just for automatic (relationship) stuff
   //
-  _factory: function(stream, o) {
-  	var item = o.exportToStreamItem(stream),
-        holdHours = parseInt(stream.get('holdHours') || 0),
+  _factory: function(delta, o) {
+  	var item = o.exportToStreamItem(delta),
+        holdHours = parseInt(delta.get('holdHours') || 0),
         holdTime = (holdHours > 0 ? holdHours : 0) * 60 * 60 * 1000,
         timestamp = new Date().getTime() + holdTime,
         holdDate = new Date(timestamp);
+    item.set('originalUrl',item.get('url'));
   	item.set('relationship', o.className+'_'+o.id);
     item.set('holdDate',holdDate);
-  	item.set('streamId', stream.id);
+  	item.set('deltaId', delta.id);
   	item.set('operations', {
-  		'shorten' : stream.get('shortener')
+  		'shorten' : true
   	});
    	return item;
   },
