@@ -1,4 +1,4 @@
-var 
+var
     CCObject = require('cloud/libs/CCObject');
     URLShortener = require('cloud/libs/URLShortener'),
     Content = require('cloud/Content').Content,
@@ -12,7 +12,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
    * Then delete extra data that we don't want to send down
    * (trim the pipe bandwidth)
    */
-  render: function() {
+  present: function() {
     var item = JSON.parse(JSON.stringify(this));
     delete item.holdDate;
     delete item.operations;
@@ -65,9 +65,9 @@ var StreamItem = Parse.Object.extend("StreamItem", {
 }, {
 	// @Class
 
-  // 
+  //
   // Takes an object (Either Content or...?)
-  // 
+  //
   factory: function(delta, objects, options) {
     var map = {},
         query = new Parse.Query(StreamItem);
@@ -79,7 +79,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
     var relationships = Object.keys(map);
 
     query.containedIn("relationship", relationships);
-    query.equalTo('deltaId',delta.id);
+    query.equalTo('delta',delta);
     query.find({
       success: function(items) {
         CCObject.log('[ItemFactory] found item matches: '+items.length);
@@ -94,7 +94,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
             built[relationship] = item;
           }
           else {
-            built[relationship] = StreamItem._factory(delta, map[relationship]); 
+            built[relationship] = StreamItem._factory(delta, map[relationship]);
             if (built[relationship]) {
             	toSave.push(built[relationship]);
             }
@@ -102,7 +102,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
         }
         for (var r in relationships) {
           var relationship = relationships[r];
-          built[relationship] = StreamItem._factory(delta, map[relationship]); 
+          built[relationship] = StreamItem._factory(delta, map[relationship]);
           if (built[relationship]) {
 	          toSave.push(built[relationship]);
 	        }
@@ -115,11 +115,11 @@ var StreamItem = Parse.Object.extend("StreamItem", {
           error: options.error,
         });
       },
-      error: options.error, 	
+      error: options.error,
     });
   },
 
-  // 
+  //
   // Takes an object (Either Content or...?)
   // The object has exportToStreamItem(stream) called on it
   // Do any setup there
@@ -134,7 +134,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
     item.set('originalUrl',item.get('url'));
   	item.set('relationship', o.className+'_'+o.id);
     item.set('holdDate',holdDate);
-  	item.set('deltaId', delta.id);
+    item.set('delta', delta);
   	item.set('operations', {
   		'shorten' : true
   	});

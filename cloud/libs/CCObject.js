@@ -28,7 +28,7 @@ exports.canonicalArray = function(arr) {
   var ret = [];
   for (var i in arr) {
     var v = exports.canonicalTag(arr[i]);
-    if (v.length > 0) {
+    if (v.length > 0 && ret.indexOf(v) < 0) {
       ret.push(v);
     }
   }

@@ -86,18 +86,28 @@ var Content = Parse.Object.extend("Content", {
           var ts = self.get('timestamp'),
               now = new Date().getTime(),
               age = now - ts,
-              images = self.get('images');
+              images = self.get('images'),
+              tags = CCObject.arrayUnion(self.get('tags') || [], self.get('topics') || []),
+              canonicalTags = CCObject.canonicalArray(tags),
+              canonicalTitle = CCObject.canonicalTag(self.get('title')),
+              domains = self.get('url').match(/^(?:https?:\/\/)?(?:www\.)?([^\/]+)/i), //
+              parts = domains.length >= 1 ? domains[0].split('.') : [''],
+              host = parts.slice(1).join('.');
+
+          canonicalTags.push(canonicalTitle);
           if (age < 0) {
             ts = now;
             self.set('timestamp',ts);
           }
+          self.set('host', host);
+          self.set('canonicalSearchString', ','+canonicalTags.join(',')+',');
           self.set('imageCount',images ? images.length : 0);
           self.set('publishedDate',new Date(ts));
           self.set('score',self.calculateScore());
           if(options && options.success) options.success();
         },
         hasBeenAnalyzed = lastAnalysis ? true : false; // If it hasn't been analyzed, let's just get it into the DB
-        
+
     var analyzerQueue = new OpQueue();
     analyzerQueue.displayName = 'Analyzer';
     analyzerQueue.maxConcurrentOps = 3;
@@ -197,7 +207,7 @@ var Content = Parse.Object.extend("Content", {
           topics.push(ts[t]['topic']);
         }
         self.set('nsfw',nsfw === 'false' || !nsfw ? false : true);
-        self.set('type',type); 
+        self.set('type',type);
         self.set('topics',topics);
       }
       self.set('lastAnalysis',new Date());
@@ -214,7 +224,7 @@ var Content = Parse.Object.extend("Content", {
   // Known keys...
   _keys: ['url','title','tags','images','publisher','text','payload','timestamp','sourceType','sourceId','weight'],
 
-  // 
+  //
   // Takes a map of URLs => what we know about them
   //
   factory: function(map, options) {
@@ -236,13 +246,13 @@ var Content = Parse.Object.extend("Content", {
             built[url] = obj;
           }
           else {
-            built[url] = Content._factory(url, map[url]); 
+            built[url] = Content._factory(url, map[url]);
             toSave.push(built[url]);
           }
         }
         for (var k in urls) {
           var url = urls[k];
-          built[url] = Content._factory(url, map[url]); 
+          built[url] = Content._factory(url, map[url]);
           toSave.push(built[url]);
         }
         if (urls.length > 0) {
@@ -265,19 +275,8 @@ var Content = Parse.Object.extend("Content", {
   // obj is any pre-existing data
   //
   _factory: function(url, obj) {
-    var content = new Content(),
-        canonicalTags = CCObject.canonicalArray(obj.tags),
-        canonicalTitle = CCObject.canonicalTag(obj.title),
-        domains = url.match(/^(?:https?:\/\/)?(?:www\.)?([^\/]+)/i), // 
-        parts = domains.length >= 1 ? domains[0].split('.') : [''],
-        host = parts.slice(1).join('.');
-
-    canonicalTags.push(canonicalTitle);
-
+    var content = new Content();
     content.assign(obj);
-    content.set('host', host);
-    content.set('name', canonicalTitle.replace(/\s/g,'-').toLowerCase());
-    content.set('canonicalSearchString', ','+canonicalTags.join(',')+',');
     content.set('url', url);
     return content;
   },

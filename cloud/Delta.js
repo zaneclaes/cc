@@ -32,7 +32,7 @@ var Delta = Parse.Object.extend("Delta", {
     }
     query.containedIn('objectId',sourceIds);
     query.find({
-      success: function(sources) {   
+      success: function(sources) {
         // Content sources (rss, prismatic, etc.) are bundled up and sent to fetchContent
         // Static sources (recycling, etc.) are bundled up and sent to fetchStatic
         var contentSources = [],
@@ -127,9 +127,7 @@ var Delta = Parse.Object.extend("Delta", {
     }
     // Do not include content without images, or NSFW
     query.greaterThanOrEqualTo('imageCount',minImages);
-    query.exists('images');
-    query.exists('name');
-    query.equalTo('nsfw',false);
+    query.notEqualTo('nsfw',true);
     // Social velocity filters
     if (velocity || shares) {
       query.greaterThanOrEqualTo('fbShareVelocity',velocity);

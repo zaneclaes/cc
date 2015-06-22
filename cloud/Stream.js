@@ -16,7 +16,7 @@ var Stream = Parse.Object.extend("Stream", {
    * First, calls out to Populate in order to fill up StreamItems
    * Then queries stream items in order to return them to the client
    */
-  render: function(options) {
+  present: function(options) {
     var self = this;
     options.limit = options.limit || this.inferFetchLimit();
     options.offset = options.offset || 0;
@@ -34,7 +34,7 @@ var Stream = Parse.Object.extend("Stream", {
           success: function(items) {
             var res = [];
             for (var i in items) {
-              res.push(items[i].render());
+              res.push(items[i].present());
             }
             options.success(res);
           },
@@ -54,7 +54,7 @@ var Stream = Parse.Object.extend("Stream", {
     var self = this;
     var finalCallback = options.success;
 
-    // First, get the most recent existing StreamItem object so we can query on the date    
+    // First, get the most recent existing StreamItem object so we can query on the date
     var query = new Parse.Query(StreamItem);
     query.equalTo('streamId',this.id);
     query.limit(1);
@@ -129,7 +129,7 @@ var Stream = Parse.Object.extend("Stream", {
           options.error({'error':'stream not found'});
         }
         else {
-  				stream.render(options);
+  				stream.present(options);
         }
 			},
 			error: options.error,
