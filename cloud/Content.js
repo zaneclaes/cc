@@ -37,9 +37,11 @@ var Content = Parse.Object.extend("Content", {
     for (var k in keys) {
       item.set(keys[k], this.get(k));
     }
+    var date = (new Date()).toISOString().slice(0,10),
+        name = CCObject.canonicalTag(this.get('title')).replace(/\s/g,'-').toLowerCase();
     item.set('score', matchCount * matchCount * item.get('score'));
-    item.set('shortcode',(new Date()).toISOString().slice(0,10)+'-'+CCObject.canonicalTag(this.get('title')));
-    item.set('matches', CCObject.arrayUnion([matchRegex],matches));
+    item.set('shortcode',date+'-'+name);
+    item.set('matches', matches);
     item.set('matchCount', matchCount);
     return item;
   },
@@ -224,7 +226,7 @@ var Content = Parse.Object.extend("Content", {
   // @Class
 
   // Known keys...
-  _keys: ['url','title','tags','images','publisher','text','payload','timestamp','source','weight'],
+  _keys: ['url','title','tags','images','publisher','text','timestamp','source','weight'],
 
   //
   // Takes a map of URLs => what we know about them
@@ -260,6 +262,10 @@ var Content = Parse.Object.extend("Content", {
         if (urls.length > 0) {
           CCObject.log('Content factory builds to save: ',2);
           CCObject.log(urls,2);
+        }
+        else {
+          options.success(built);
+          return;
         }
         Parse.Object.saveAll(toSave, {
           success: function(saved) {

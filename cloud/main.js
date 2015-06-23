@@ -137,6 +137,6 @@ Parse.Cloud.beforeSave("Content", function(request, response) {
 });
 
 Parse.Cloud.beforeSave("StreamItem", function(request, response) {
-	request.object.finalize(response);
+	request.object.fork(response);
 });
 

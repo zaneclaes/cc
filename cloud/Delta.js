@@ -30,6 +30,7 @@ var Delta = Parse.Object.extend("Delta", {
       self.fetchContent([], stream, options);
       return;
     }
+    this.stream = stream;
     query.containedIn('objectId',sourceIds);
     query.find({
       success: function(sources) {
@@ -109,7 +110,7 @@ var Delta = Parse.Object.extend("Delta", {
     // Date range for PUBLICATION (how recent we want our news)
     if (publishedDate) {
       query.greaterThan('publishedDate', publishedDate);
-      log.push('publishedDate < ' + publishedDate.getTime());
+      log.push('publishedDate > ' + publishedDate.getTime());
     }
     // Constrain to a specific feed id/type
     if (sources && sources.length) {
@@ -127,7 +128,11 @@ var Delta = Parse.Object.extend("Delta", {
     }
     // Do not include content without images, or NSFW
     query.greaterThanOrEqualTo('imageCount',minImages);
+    log.push('imageCount >= '+minImages);
+
+    // Never include NSFW, for now, though allow unverified (undefined) to get thru
     query.notEqualTo('nsfw',true);
+
     // Social velocity filters
     if (velocity || shares) {
       query.greaterThanOrEqualTo('fbShareVelocity',velocity);
@@ -152,8 +157,8 @@ var Delta = Parse.Object.extend("Delta", {
     CCObject.log('[Delta] search: '+log.join(' | '),2);
     query.find({
       success: function(contents) {
-        CCObject.log('[Delta] found content: '+contents.length);
-        StreamItem.factory(self, contents, options);
+        CCObject.log('[Delta] found content: '+contents.length,2);
+        StreamItem.factory(stream, self, contents, options);
       },
       error: options.error
     });

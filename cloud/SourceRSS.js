@@ -8,7 +8,7 @@ var CCHttp = require('cloud/libs/CCHttp'),
  * No link in a RSS feed matching any of these will ever become content
  */
 var globalBlacklist = [
-	'reddit', 'kickstarter', 'feedsportal', 'instructables',
+	'reddit', 'kickstarter', 'feedsportal', 'instructables', 'google,'
 ];
 
 /**

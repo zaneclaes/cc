@@ -1,8 +1,7 @@
-var
-    CCObject = require('cloud/libs/CCObject');
-    URLShortener = require('cloud/libs/URLShortener'),
+var CCObject = require('cloud/libs/CCObject'),
     Content = require('cloud/Content').Content,
-    OpQueue = require('cloud/libs/CCOpQueue').OpQueue;
+    OpQueue = require('cloud/libs/CCOpQueue').OpQueue,
+    Fork = require('cloud/Fork').Fork;
 
 var StreamItem = Parse.Object.extend("StreamItem", {
 	// @Instance
@@ -26,49 +25,44 @@ var StreamItem = Parse.Object.extend("StreamItem", {
 	 * Before Save
 	 * Shortens the URL, etc.
 	 */
-	finalize: function(options) {
+	fork: function(options) {
 		var self = this,
-				opMap = {},
-				ops = self.get('operations');
+				forkMap = {},
+				forkIds = self.get('pendingForkIds');
 
-		if(!ops || !Object.keys(ops).length) {
+		if(!forkIds || !forkIds.length) {
       if(options && options.success) options.success();
       return;
 		}
 
-		var finalizerQueue = new OpQueue();
-		finalizerQueue.displayName = 'Finalizer';
-		finalizerQueue.maxConcurrentOps = 3;
+    // Load the forks...
+    var query = new Parse.Query(Fork);
+    query.containedIn('objectId',forkIds);
+    query.find({
+      success: function(forks) {
+        if(!forks || !forks.length) {
+          if(options && options.success) options.success();
+          return;
+        }
+        self.set('status', StreamItem.STATUS_FORKED); // Will only be committed if this all succceds.
+        Fork.forkStreamItem(self, forks, options);
+      },
+      error: options.error,
+    })
 
-		// Do each of the queued operations...
-		for (var o in ops) {
-			opMap[o] = finalizerQueue.queueOp({
-				run: function(op, options) {
-					URLShortener.bitly(self.get('url'), options);
-				}
-			});
-		}
-
-		// Finish up...
-		finalizerQueue.run(function(q){
-			if (Object.keys(ops).indexOf('shorten')>=0) {
-				var shortened = q.results[opMap['shorten']];
-				if (shortened) {
-					self.set('url',shortened.data.url);
-				}
-			}
-			self.set('operations',{});
-      if(options && options.success) options.success();
-		});
 	},
 
 }, {
 	// @Class
+  STATUS_PENDING: "rejected",    // Stream owner rejected content; do not show in queries.
+  STATUS_FORKED: "forked",       // Fork job complete. Ready for display.
+
+  STREAM_STATUSES: ["forked"],   // On a standard Stream query, which statuses are acceptable?
 
   //
   // Takes an object (Either Content or...?)
   //
-  factory: function(delta, objects, options) {
+  factory: function(stream, delta, objects, options) {
     var map = {},
         query = new Parse.Query(StreamItem);
     for (var o in objects) {
@@ -94,7 +88,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
             built[relationship] = item;
           }
           else {
-            built[relationship] = StreamItem._factory(delta, map[relationship]);
+            built[relationship] = StreamItem._factory(stream, delta, map[relationship]);
             if (built[relationship]) {
             	toSave.push(built[relationship]);
             }
@@ -102,12 +96,16 @@ var StreamItem = Parse.Object.extend("StreamItem", {
         }
         for (var r in relationships) {
           var relationship = relationships[r];
-          built[relationship] = StreamItem._factory(delta, map[relationship]);
+          built[relationship] = StreamItem._factory(stream, delta, map[relationship]);
           if (built[relationship]) {
 	          toSave.push(built[relationship]);
 	        }
         }
         CCObject.log('[ItemFactory] builds to save: '+toSave.length);
+        if (toSave.length <= 0) {
+          options.success(built);
+          return;
+        }
         Parse.Object.saveAll(toSave, {
           success: function(saved) {
             options.success(built);
@@ -125,19 +123,18 @@ var StreamItem = Parse.Object.extend("StreamItem", {
   // Do any setup there
   // This is just for automatic (relationship) stuff
   //
-  _factory: function(delta, o) {
+  _factory: function(stream, delta, o) {
   	var item = o.exportToStreamItem(delta),
         holdHours = parseInt(delta.get('holdHours') || 0),
         holdTime = (holdHours > 0 ? holdHours : 0) * 60 * 60 * 1000,
         timestamp = new Date().getTime() + holdTime,
         holdDate = new Date(timestamp);
+    item.set('stream',stream);
     item.set('originalUrl',item.get('url'));
   	item.set('relationship', o.className+'_'+o.id);
     item.set('holdDate',holdDate);
     item.set('delta', delta);
-  	item.set('operations', {
-  		'shorten' : true
-  	});
+    item.set('pendingForkIds',delta.get('forkIds'));
    	return item;
   },
 

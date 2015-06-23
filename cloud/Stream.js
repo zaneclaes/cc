@@ -26,7 +26,7 @@ var Stream = Parse.Object.extend("Stream", {
         var query = new Parse.Query(StreamItem);
         query.equalTo('streamId',self.id);
         query.lessThan('holdDate',new Date());
-        query.notContainedIn('status',['rejected']);
+        query.containedIn('status',[StreamItem.STREAM_STATUSES]);
         query.limit(options.limit);
         query.skip(options.offset);
         query.descending('createdAt');
