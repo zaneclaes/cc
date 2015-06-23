@@ -24,9 +24,9 @@ var Stream = Parse.Object.extend("Stream", {
     this.populate({
       success: function() {
         var query = new Parse.Query(StreamItem);
-        query.equalTo('streamId',self.id);
+        query.equalTo('stream',self);
         query.lessThan('holdDate',new Date());
-        query.containedIn('status',[StreamItem.STREAM_STATUSES]);
+        query.containedIn('status',StreamItem.STREAM_STATUSES);
         query.limit(options.limit);
         query.skip(options.offset);
         query.descending('createdAt');

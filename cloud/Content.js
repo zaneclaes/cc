@@ -14,6 +14,61 @@ var Content = Parse.Object.extend("Content", {
   // @Instance
 
   /**
+   * Find a single meta tag, like "property", "og:image"
+   */
+  findMetaTag: function(key, value) {
+    var metas = this.get('metaTags');
+    for (var m in metas) {
+      var tag = metas[m];
+      if (tag[key] === value) {
+        return tag;
+      }
+    }
+    return false;
+  },
+  /**
+   * For example, [{"property":"og:image"}]
+   * Preserves order
+   */
+  findMetaTags: function(kvArray) {
+    var ret = [];
+    for (var i in kvArray) {
+      var keys = Object.keys(kvArray[i]),
+          tag = this.findMetaTag(keys[0], kvArray[i][keys[0]]);
+      if (tag) {
+        ret.push(tag);
+      }
+    }
+    return ret;
+  },
+  /**
+   * Use meta tags to search for an image, i.e., FB OG
+   */
+  findMetaImage: function() {
+    var tags = this.findMetaTags([{"property":"og:image"}]);
+    if (!tags || !tags.length) return false;
+    for (var t in tags) {}    
+      var tag = tags[t];
+
+      if (tag.property = 'og:image') {
+        return tag.content;
+      }
+      // else if twitter??
+    }
+    return false;
+  },
+  inferImages: function() {
+    var images = this.get('images') || [];
+    var url = this.findMetaImage();
+    if (images.length > 0) {
+      return;
+    }
+    if (!url) {
+      return;
+    }
+    this.set('images',[{'url':url}]);
+  },
+  /**
    * Actually create and return a StreamItem
    * Used by the StreamItem._factory
    * (where more data is added)
@@ -54,7 +109,6 @@ var Content = Parse.Object.extend("Content", {
       }
     }
   },
-
   /*
    * Based on everything we know, compute a score for a Content object
    * We do this by normalizing the score on "shares" (i.e., how much is
@@ -103,6 +157,7 @@ var Content = Parse.Object.extend("Content", {
             ts = now;
             self.set('timestamp',ts);
           }
+          self.inferImages();
           self.set('host', host);
           self.set('canonicalSearchString', ','+canonicalTags.join(',')+',');
           self.set('imageCount',images ? images.length : 0);
@@ -137,7 +192,6 @@ var Content = Parse.Object.extend("Content", {
     }
 
     // Get Meta tags
-    /* not necessary, not using OG tags; might cause $/. Parse error in key names.
     if (!this.get('metaTags')) {
       log += 'metaTags, ';
       metaTagsOpId = analyzerQueue.queueOp({
@@ -145,7 +199,7 @@ var Content = Parse.Object.extend("Content", {
           Analyzer.metaTags(self.get('url'), options);
         }
       });
-    }*/
+    }
 
     // Get Prismatic URL analysis
     if (!this.get('type')) {
@@ -166,7 +220,7 @@ var Content = Parse.Object.extend("Content", {
     analyzerQueue.run(function(q) {
       var headline = headlineOpId>=0 ? (q.results[headlineOpId] || {}) : null,
           fbGraph = fbGraphOpId>=0 ? (q.results[fbGraphOpId] || {}) : null,
-          metaTags = metaTagsOpId>=0 ? (q.results[metaTagsOpId] || {}) : null,
+          metaTags = metaTagsOpId>=0 ? (q.results[metaTagsOpId] || []) : null,
           pAnnotations = pOpId>=0 ? (q.results[pOpId] || {}) : null;
       // Stash headline data
       if (headline) {

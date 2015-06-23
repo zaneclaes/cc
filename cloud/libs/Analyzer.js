@@ -43,7 +43,7 @@ exports.metaTags = function(url, response) {
     if (val && (val.indexOf('"')==0 || val.indexOf('"')==0)) {
       val = val.substr(1,val.length-2);
     }
-    return val;
+    return key && val ? {'k': key, 'v': val} : null;
   };
   return CCHttp.httpCachedRequest({
     url: url,
@@ -53,18 +53,20 @@ exports.metaTags = function(url, response) {
     timeout: -1, // never expire, always goood.
     success: function(html) {
       var tags = html.match(new RegExp("<meta\\s*(?:(?:\\b(\\w|-)+\\b\\s*(?:=\\s*(?:[\"\"[^\"\"]*\"\"|'[^']*'|[^\"\"'<> ]|[''[^'']*''|\"[^\"]*\"|[^''\"<> ]]]+)\\s*)?)*)/?\\s*>",'gi')),
-          map = {};
+          res = [];
       for(var t in tags) {
+        var map = {};
         var m = tags[t].match(/((\S+)=["']?((?:.(?!["']?\s+(?:\S+)=|[>"']))+.)["']?)+/gi);
         if (!m) continue;
-        for (var i=0; (i+1)<m.length; i+=2) {
-          var k = getKV(m[i]), v = getKV(m[i+1]);
-          if (k && v) {
-            map[k] = v;
+        for (var i=0; i<m.length; i++) {
+          var kv = getKV(m[i]);
+          if (kv) {
+            map[kv.k] = kv.v;
           }
         }
+        res.push(map);
       }
-      response.success(map);
+      response.success(res);
     },
     error: function(e) {
       response.error(e);
