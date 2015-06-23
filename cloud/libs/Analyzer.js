@@ -50,9 +50,13 @@ exports.metaTags = function(url, response) {
     key: url,
     html: true,
     cacheName: 'MetaTags',
-    timeout: -1, // never expire, always goood.
-    success: function(html) {
-      var tags = html.match(new RegExp("<meta\\s*(?:(?:\\b(\\w|-)+\\b\\s*(?:=\\s*(?:[\"\"[^\"\"]*\"\"|'[^']*'|[^\"\"'<> ]|[''[^'']*''|\"[^\"]*\"|[^''\"<> ]]]+)\\s*)?)*)/?\\s*>",'gi')),
+    timeout: 1, // never expire, always goood.
+    parse: function(test) {
+      console.log('parse');
+      console.log(test);
+    },
+    success: function(result) {
+      var tags = result.text.match(new RegExp("<meta\\s*(?:(?:\\b(\\w|-)+\\b\\s*(?:=\\s*(?:[\"\"[^\"\"]*\"\"|'[^']*'|[^\"\"'<> ]|[''[^'']*''|\"[^\"]*\"|[^''\"<> ]]]+)\\s*)?)*)/?\\s*>",'gi')),
           res = [];
       for(var t in tags) {
         var map = {};
@@ -66,7 +70,10 @@ exports.metaTags = function(url, response) {
         }
         res.push(map);
       }
-      response.success(res);
+      response.success({
+        tags : res,
+        headers : result.headers,
+      });
     },
     error: function(e) {
       response.error(e);

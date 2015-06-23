@@ -22,7 +22,7 @@ var Fork = Parse.Object.extend("Fork", {
 	 */
 	merge: function(forkResults, streamItem) {
 		if (forkResults) {
-			if (forkResults.data.url) streamItem.set('url',forkResults.data.url);
+			if (forkResults.obj.data.url) streamItem.set('url',forkResults.obj.data.url);
 		}
 	},
 

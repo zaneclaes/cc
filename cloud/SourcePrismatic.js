@@ -73,8 +73,8 @@ exports.ingest = function(options) {
 		cacheValidation: function(obj) {
 			return obj.docs ? true : false;
 		},
-		success: function(obj) {
-			var items = obj.docs.items,
+		success: function(res) {
+			var items = res.obj.docs.items,
 					lastItem = null,
 					contentMap = {};
 			for (var x in items) {

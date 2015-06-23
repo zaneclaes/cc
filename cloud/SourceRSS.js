@@ -13,53 +13,12 @@ var globalBlacklist = [
 
 /**
  * Turn Google RSS image styles into the database style we use
- [
-  {
-    "in-div": false,
-    "size": {
-      "height": 549,
-      "width": 976
-    },
-    "url": "http:\/\/ichef.bbci.co.uk\/news\/976\/cpsprodpb\/F49C\/production\/_83702626_752fe39b-e1b9-4128-859d-f72b9f2c7120.jpg"
-  }
-]
  */
 function normalizeImages(images) {
 	if (!images || !images.length) {
 		return [];
 	}
 	var ret = [];
-/*
-[
-  {
-    "contents": [
-      {
-        "credits": [
-          {
-            "content": "Photograph: Google",
-            "scheme": "urn:ebu"
-          }
-        ],
-        "description": "A hallucinatory filter over a red tree. Spot the animals.",
-        "height": 276,
-        "url": "http:\/\/static.guim.co.uk\/sys-images\/Guardian\/Pix\/pictures\/2015\/6\/18\/1434625863273\/d6e5ac38-73df-424f-8632-7bc1e97bacf2-460x276.jpeg",
-        "width": 460
-      },
-      {
-        "credits": [
-          {
-            "content": "Photograph: Google",
-            "scheme": "urn:ebu"
-          }
-        ],
-        "description": "A hallucinatory filter over a red tree. Spot the animals.",
-        "height": 84,
-        "url": "http:\/\/static.guim.co.uk\/sys-images\/Guardian\/Pix\/pictures\/2015\/6\/18\/1434625863610\/e2574d34-70fe-4df5-a63b-2e8dc3b26723-140x84.jpeg",
-        "width": 140
-      }
-    ]
-  }
-]*/
 	for (var i in images) {
 		var contents = images[i]['contents'],
 				whitelist = ['credits','description','url'];
@@ -80,7 +39,6 @@ function normalizeImages(images) {
 	}
 	return ret;
 }
-
 /**
  * Fetch a RSS feed from a single URL
  *
@@ -100,11 +58,11 @@ exports.ingestRssUrl = function(rssUrl, source, options) {
   	cacheValidation: function(obj) {
   		return obj.responseData && obj.responseData.feed && obj.responseData.feed.entries ? true : false;
   	},
-  	success: function(obj) {
+  	success: function(res) {
 			var lastEntry = null,
 					contentMap = {};
-			for (var e in obj.responseData.feed.entries) {
-				lastEntry = obj.responseData.feed.entries[e];
+			for (var e in res.obj.responseData.feed.entries) {
+				lastEntry = res.obj.responseData.feed.entries[e];
 				var url = lastEntry['link'],
 						blacklisted = false;
 				// We don't actually want content from reddit itself...
@@ -150,12 +108,12 @@ exports.ingestRssQuery = function(query, options) {
 	  cacheValidation: function(obj) {
 			return obj.responseData && obj.responseData.entries ? true : false;
 	  },
-		success: function(obj) {
+		success: function(res) {
 		  var q = new OpQueue(),
 				  created = [];
 			q.displayName = 'RssIngestion';
-			for (var e in obj.responseData.entries) {
-				var entry = obj.responseData.entries[e];//url, title, contentSnippet, link
+			for (var e in res.obj.responseData.entries) {
+				var entry = res.obj.responseData.entries[e];//url, title, contentSnippet, link
 				var op = q.queueOp({
 					url: entry.url,
 					source: options.source,

@@ -1,6 +1,14 @@
 
 exports.defaultTimeout = 1000 * 60 * 15; // 15 Minutes...
 
+function normalizeKeys(obj) {
+	var ret = {};
+	for (var k in obj) {
+		ret[k.toLowerCase()] = obj[k];
+	}
+	return ret;
+}
+
 // options must have:
 // url, cacheName, success, error
 exports.httpCachedRequest = function(options) {
@@ -12,6 +20,15 @@ exports.httpCachedRequest = function(options) {
   		query = new Parse.Query(parseClassName),
   		validateForCaching = options.cacheValidator || function(obj) { return true; },
   		row = null,
+  		callback = function(row) {
+				options.success({
+  				obj: row.get('obj'),
+  				text: row.get('text'),
+  				cookies: row.get('cookies'),
+  				headers: normalizeKeys(row.get('headers')),
+  				status: row.get('status'),
+  			});
+  		},
   		fetch = function() {
 			  Parse.Cloud.httpRequest({
 			  	url: options.url,
@@ -21,23 +38,20 @@ exports.httpCachedRequest = function(options) {
 			  	success: function(httpResponse) {
 			  		// Actually got the HTTP request.
 			  		//console.log(httpResponse.text);
-			  		var obj = httpResponse.text;
-			  		if (!options.html) {
-			  			obj = JSON.parse(obj);
-			  		}
-
-			  		if (validateForCaching(obj)) {
+			  		if (validateForCaching(httpResponse.data)) {
 				  		// Either create or update the content
 				  		if (!row) {
 				  			row = new ContentClass();
 				  			row.set('key', key);
 				  			row.set('url', options.url);
 				  		}
-			  			row.set('obj', obj);
+			  			row.set('obj', httpResponse.data);
+			  			row.set('text', httpResponse.text);
+			  			row.set('cookies', httpResponse.cookies);
+			  			row.set('headers', httpResponse.headers);
+			  			row.set('status', httpResponse.status);
 			  			row.save({
-			  				success: function() {
-			  					options.success(obj);
-			  				},
+			  				success: callback,
 			  				error: options.error,
 			  			});
 			  		}
@@ -59,7 +73,7 @@ exports.httpCachedRequest = function(options) {
   				age = new Date().getTime() - updatedAt;
   		if (row && (timeout < 0 || age < timeout)) {
 	  		//console.log('cache hit: '+ key);
-  			options.success(row.get('obj'));
+  			callback(row);
   		}
   		else {
   			//console.log('cache miss (age)');

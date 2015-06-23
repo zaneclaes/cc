@@ -71,11 +71,19 @@ var Delta = Parse.Object.extend("Delta", {
           for(var r in ops.results) {
             res = CCObject.arrayUnion(res, ops.results[r]);
           }
-          options.success(res);
+          self.gateContent(res, stream, options);
         });
       },
       error: options.error,
     });
+  },
+  /**
+   * The array of content has been saved to the stream after a fetch
+   * Now we need to choose which content is actually rendered, based
+   * on score.
+   */
+  gateContent: function(content, stream, options) {
+    options.success(content);
   },
   /**
    * Fetches posts for the stream from the Content table

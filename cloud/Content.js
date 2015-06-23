@@ -47,7 +47,7 @@ var Content = Parse.Object.extend("Content", {
   findMetaImage: function() {
     var tags = this.findMetaTags([{"property":"og:image"}]);
     if (!tags || !tags.length) return false;
-    for (var t in tags) {}    
+    for (var t in tags) {
       var tag = tags[t];
 
       if (tag.property = 'og:image') {
@@ -148,9 +148,7 @@ var Content = Parse.Object.extend("Content", {
               tags = CCObject.arrayUnion(self.get('tags') || [], self.get('topics') || []),
               canonicalTags = CCObject.canonicalArray(tags),
               canonicalTitle = CCObject.canonicalTag(self.get('title')),
-              domains = self.get('url').match(/^(?:https?:\/\/)?(?:www\.)?([^\/]+)/i), //
-              parts = domains.length >= 1 ? domains[0].split('.') : [''],
-              host = parts.slice(1).join('.');
+              domains = self.get('url').match(/^(?:https?:\/\/)?(?:www\.)?([^\/]+)/i);
 
           canonicalTags.push(canonicalTitle);
           if (age < 0) {
@@ -158,7 +156,7 @@ var Content = Parse.Object.extend("Content", {
             self.set('timestamp',ts);
           }
           self.inferImages();
-          self.set('host', host);
+          self.set('host', domains.length > 1 ? domains[1] : null);
           self.set('canonicalSearchString', ','+canonicalTags.join(',')+',');
           self.set('imageCount',images ? images.length : 0);
           self.set('publishedDate',new Date(ts));
@@ -192,7 +190,7 @@ var Content = Parse.Object.extend("Content", {
     }
 
     // Get Meta tags
-    if (!this.get('metaTags')) {
+    if (!this.has('metaTags')) {
       log += 'metaTags, ';
       metaTagsOpId = analyzerQueue.queueOp({
         run: function(op, options) {
@@ -202,7 +200,7 @@ var Content = Parse.Object.extend("Content", {
     }
 
     // Get Prismatic URL analysis
-    if (!this.get('type')) {
+    if (!this.has('type')) {
       log += 'prismatic, ';
       pOpId = analyzerQueue.queueOp({
         run: function(op, options) {
@@ -224,6 +222,7 @@ var Content = Parse.Object.extend("Content", {
           pAnnotations = pOpId>=0 ? (q.results[pOpId] || {}) : null;
       // Stash headline data
       if (headline) {
+        headline = headline.obj || {};
         //CCObject.log('headline score: '+headline.score.total+' ['+headline.score.summary+']');
         var sentiments = {"positive": 1, "negative": -1},
             score = parseInt(headline.score ? headline.score.total : 0),
@@ -233,6 +232,7 @@ var Content = Parse.Object.extend("Content", {
       }
       // Stash FB Graph data
       if (fbGraph) {
+        fbGraph = fbGraph.obj || {};
         var shares = parseInt(fbGraph.shares || 0),
             age = new Date().getTime() - (self.get('timestamp') || 0),
             ageMinutes = age / (60 * 1000),
@@ -249,11 +249,18 @@ var Content = Parse.Object.extend("Content", {
       // Stash FB Tags data
       if (metaTags) {
         CCObject.log('got tags');
-        CCObject.log(metaTags);
-        self.set('metaTags',metaTags);
+        CCObject.log(metaTags.tags);
+        CCObject.log(metaTags.headers);
+        self.set('metaTags',metaTags.tags);
+
+        var headers = metaTags.headers || {};
+        if (headers.location) {
+          self.set('url',headers.location);
+        }
       }
       // Stash Prismatic data
       if (pAnnotations) {
+        pAnnotations = pAnnotations.obj || {};
         CCObject.log('prismatic data');
         CCObject.log(pAnnotations);
         var aspects = pAnnotations.aspects || {},

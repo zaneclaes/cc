@@ -48,16 +48,13 @@ exports.extractString = function(str, beginning, end) {
   return match >= 0 ? str.substring(0, match) : str;
 }
 
-exports.arrayUnion = function(x, y) {
-  var obj = {};
-  for (var i = x.length-1; i >= 0; -- i)
-     obj[x[i]] = x[i];
-  for (var i = y.length-1; i >= 0; -- i)
-     obj[y[i]] = y[i];
-  var res = []
-  for (var k in obj) {
-    if (obj.hasOwnProperty(k))  // <-- optional
-      res.push(obj[k]);
+exports.arrayUnion = function() {
+  var res = [];
+  for (var i=0; i<arguments.length; i++) {
+    var arg = arguments[i];
+    for (var j=0; j<arg.length; j++) {
+      res.push(arg[j]);
+    }
   }
   return res;
 }

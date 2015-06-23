@@ -11,7 +11,6 @@ var DEFAULT_MAX_CONTENT_AGE = 1000 * 60 * 60 * 24 * 7;
 
 var Stream = Parse.Object.extend("Stream", {
   // @Instance
-
   /**
    * First, calls out to Populate in order to fill up StreamItems
    * Then queries stream items in order to return them to the client
@@ -44,7 +43,6 @@ var Stream = Parse.Object.extend("Stream", {
       error: options.error,
     });
   },
-
   /**
    * Fills up the stream with new StreamItem objects by calling fetchDeltas
    *
@@ -76,7 +74,6 @@ var Stream = Parse.Object.extend("Stream", {
       error: options.error,
     });
   },
-
   /**
    * Find deltas which feed this stream and fetch (populate) them
    */
@@ -101,7 +98,6 @@ var Stream = Parse.Object.extend("Stream", {
       error: options.error
     });
   },
-
   /**
    * Max number of items to fetch at a time
    * For now, this is just hardcoded, but it could be used for query timeout fixes
