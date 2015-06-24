@@ -68,7 +68,7 @@ exports.ingest = function(options) {
 			CCObject.log('sources query found '+sources.length);
 			var queue = new CCOpQueue();
 			queue.displayName = 'Ingestion';
-			queue.maxConcurrentOps = 1; // Serial progression with ingestion, so we don't collide on content.
+			queue.maxConcurrentOps = 5;
 			for (var i=0; i<sources.length; i++) {
 				queue.queueOp({
 					source: sources[i],

@@ -12,7 +12,7 @@ exports.bitly = function(url, response) {
     cacheName: 'Bitly',
     timeout: -1, // never expire, always goood.
 		cacheValidation: function(obj) {
-			return obj.data ? true : false;
+			return obj && obj.data ? true : false;
 		},
     success: response.success,
     error: response.error,

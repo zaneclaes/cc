@@ -15,7 +15,7 @@ exports.headlineScore = function(headline, options) {
     timeout: -1, // Cache forever, headlines do not change in score
     success: options.success,
     error: options.error,
-  });  
+  });
 }
 
 //
@@ -50,11 +50,7 @@ exports.metaTags = function(url, response) {
     key: url,
     html: true,
     cacheName: 'MetaTags',
-    timeout: 1, // never expire, always goood.
-    parse: function(test) {
-      console.log('parse');
-      console.log(test);
-    },
+    timeout: -1, // never expire, always goood.
     success: function(result) {
       var tags = result.text.match(new RegExp("<meta\\s*(?:(?:\\b(\\w|-)+\\b\\s*(?:=\\s*(?:[\"\"[^\"\"]*\"\"|'[^']*'|[^\"\"'<> ]|[''[^'']*''|\"[^\"]*\"|[^''\"<> ]]]+)\\s*)?)*)/?\\s*>",'gi')),
           res = [];
@@ -82,7 +78,7 @@ exports.metaTags = function(url, response) {
 }
 
 //
-// Prismatic 
+// Prismatic
 //
 exports.prismaticAnnotations = function(url, response) {
   return CCHttp.httpCachedRequest({

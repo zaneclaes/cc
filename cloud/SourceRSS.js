@@ -56,7 +56,7 @@ exports.ingestRssUrl = function(rssUrl, source, options) {
   	key: rssUrl,
   	cacheName: 'Rss',
   	cacheValidation: function(obj) {
-  		return obj.responseData && obj.responseData.feed && obj.responseData.feed.entries ? true : false;
+  		return obj && obj.responseData && obj.responseData.feed && obj.responseData.feed.entries ? true : false;
   	},
   	success: function(res) {
 			var lastEntry = null,
@@ -106,7 +106,7 @@ exports.ingestRssQuery = function(query, options) {
 		cacheName: 'RssQuery',
 		timeout: 1000 * 60 * 60 * 24, // 1 day cache timeout, Google News is not likely to swap out feeds often.
 	  cacheValidation: function(obj) {
-			return obj.responseData && obj.responseData.entries ? true : false;
+			return obj && obj.responseData && obj.responseData.entries ? true : false;
 	  },
 		success: function(res) {
 		  var q = new OpQueue(),

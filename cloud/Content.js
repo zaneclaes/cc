@@ -156,6 +156,7 @@ var Content = Parse.Object.extend("Content", {
             self.set('timestamp',ts);
           }
           self.inferImages();
+          self.set('tags', canonicalTags);
           self.set('host', domains.length > 1 ? domains[1] : null);
           self.set('canonicalSearchString', ','+canonicalTags.join(',')+',');
           self.set('imageCount',images ? images.length : 0);
