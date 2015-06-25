@@ -12,7 +12,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
    * (trim the pipe bandwidth)
    */
   present: function() {
-    return CCObject.scrubJSON(this, ['holdDate','operations','relationship','matches','status','delta','stream']);
+    return CCObject.scrubJSON(this, ['holdDate','operations','relationship','matches','status','delta','stream','publisher','pendingForkIds']);
   },
 
 	/**

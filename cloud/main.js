@@ -24,26 +24,41 @@ app.use(function(req, res, next) {
 	next();
 });
 
-// GET /stream/:id
-app.get(apiRegex + 'stream/' + objectIdRegex, function(request, response) {
+// GET /streams/:id
+app.get(apiRegex + 'streams/' + objectIdRegex, function(request, response) {
 	var parts = request.url.split('/');
 	request.params.streamId = parts[4];
 	Stream.stream(request.params, {
 		success: function(out) {
-			response.json(out.json);/*
-			var query = new Parse.Query(Content);
-			query.equalTo('stream',out.stream);
-			query.find({
-				success: function(content) {
-					out.json.content = content;
-					response.json(out.json);
-				},
-				error: response.error,
-			});*/
+			response.json(out.json);
 		},
 		error: function(e) {
       response.json({'error': e});
     },
+	});
+});
+
+// GET /sources/:id
+app.get(apiRegex + 'sources/' + objectIdRegex, function(request, response) {
+	var parts = request.url.split('/'),
+			sourceId = parts[4],
+			query = new Parse.Query(Source.Source);
+	query.equalTo('objectId',sourceId);
+	query.first({
+		success: function(source) {
+			query = new Parse.Query(Content);
+			query.equalTo('source',source);
+			query.descending('createdAt');
+			query.find({
+				success: function(contents) {
+					var json = CCObject.scrubJSON(source, []);
+					json.contents = contents;
+					response.json(json);
+				},
+				error: response.error,
+			});
+		},
+		error: response.error,
 	});
 });
 

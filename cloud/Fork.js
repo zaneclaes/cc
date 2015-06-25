@@ -53,8 +53,9 @@ var Fork = Parse.Object.extend("Fork", {
 
     // Run the queue...
     forkQueue.run(function(q){
+    	forkResults = streamItem.get('forkResults') || {};
     	for (var f in forkOpMap) {
-    		forks[f].merge(q.results[forkOpMap[f]], streamItem);
+    		forkResults[forks[f].id] = forks[f].merge(q.results[forkOpMap[f]], streamItem);
     	}
       streamItem.set('pendingForkIds',[]);
       if(options && options.success) options.success();
