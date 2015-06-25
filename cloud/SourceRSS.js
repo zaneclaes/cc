@@ -104,7 +104,7 @@ exports.ingestRssQuery = function(query, options) {
 		url: url,
 		key: query,
 		cacheName: 'RssQuery',
-		timeout: 1000 * 60 * 60 * 24, // 1 day cache timeout, Google News is not likely to swap out feeds often.
+		maxAge: 1000 * 60 * 60 * 24, // 1 day cache timeout, Google News is not likely to swap out feeds often.
 	  cacheValidation: function(obj) {
 			return obj && obj.responseData && obj.responseData.entries ? true : false;
 	  },

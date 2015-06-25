@@ -12,7 +12,7 @@ exports.headlineScore = function(headline, options) {
     url: url,
     key: headline,
     cacheName: 'Headline',
-    timeout: -1, // Cache forever, headlines do not change in score
+    maxAge: -1, // Cache forever, headlines do not change in score
     success: options.success,
     error: options.error,
   });
@@ -50,7 +50,7 @@ exports.metaTags = function(url, response) {
     key: url,
     html: true,
     cacheName: 'MetaTags',
-    timeout: -1, // never expire, always goood.
+    maxAge: -1, // never expire, always goood.
     success: function(result) {
       var tags = result.text.match(new RegExp("<meta\\s*(?:(?:\\b(\\w|-)+\\b\\s*(?:=\\s*(?:[\"\"[^\"\"]*\"\"|'[^']*'|[^\"\"'<> ]|[''[^'']*''|\"[^\"]*\"|[^''\"<> ]]]+)\\s*)?)*)/?\\s*>",'gi')),
           res = [];
@@ -88,7 +88,7 @@ exports.prismaticAnnotations = function(url, response) {
     },
     key: url,
     cacheName: 'PrismaticAnnotation',
-    timeout: -1, // never expire, always goood.
+    maxAge: -1, // never expire, always goood.
     method: 'POST',
     header:{
       'Content-Type': 'application/json',

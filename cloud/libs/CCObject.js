@@ -8,6 +8,14 @@ exports.log = function(str, priority) {
   }
 }
 
+exports.scrubJSON = function(obj, keysToRemove) {
+  var item = JSON.parse(JSON.stringify(obj));
+  for (var s in keysToRemove) {
+    delete item[keysToRemove[s]];
+  }
+  return item;
+}
+
 exports.arrayRemove = function(arr) {
     var what, a = arguments, L = a.length, ax;
     while (L > 1 && arr.length) {

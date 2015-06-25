@@ -12,13 +12,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
    * (trim the pipe bandwidth)
    */
   present: function() {
-    var item = JSON.parse(JSON.stringify(this));
-    delete item.holdDate;
-    delete item.operations;
-    delete item.relationship;
-    delete item.matches;
-    delete item.status;
-    return item;
+    return CCObject.scrubJSON(this, ['holdDate','operations','relationship','matches','status','delta','stream']);
   },
 
 	/**
@@ -72,11 +66,13 @@ var StreamItem = Parse.Object.extend("StreamItem", {
     }
     var relationships = Object.keys(map);
 
-    query.containedIn("relationship", relationships);
-    query.equalTo('delta',delta);
+    query.containedIn('relationship', relationships);
+    query.equalTo('stream',stream);
+    query.descending('createdAt');
+    query.limit(1000);
     query.find({
       success: function(items) {
-        CCObject.log('[ItemFactory] found item matches: '+items.length);
+        CCObject.log('[ItemFactory] found item matches: '+items.length,3);
         var built = {},
             toSave = [];
 
@@ -101,7 +97,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
 	          toSave.push(built[relationship]);
 	        }
         }
-        CCObject.log('[ItemFactory] builds to save: '+toSave.length);
+        CCObject.log('[ItemFactory] builds to save: '+toSave.length, 3);
         if (toSave.length <= 0) {
           options.success(built);
           return;

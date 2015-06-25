@@ -25,12 +25,21 @@ app.use(function(req, res, next) {
 });
 
 // GET /stream/:id
-app.get(apiRegex + objectIdRegex, function(request, response) {
+app.get(apiRegex + 'stream/' + objectIdRegex, function(request, response) {
 	var parts = request.url.split('/');
-	request.params.streamId = parts[3];
+	request.params.streamId = parts[4];
 	Stream.stream(request.params, {
-		success: function(items) {
-			response.json(items);
+		success: function(out) {
+			response.json(out.json);/*
+			var query = new Parse.Query(Content);
+			query.equalTo('stream',out.stream);
+			query.find({
+				success: function(content) {
+					out.json.content = content;
+					response.json(out.json);
+				},
+				error: response.error,
+			});*/
 		},
 		error: function(e) {
       response.json({'error': e});
@@ -42,10 +51,10 @@ app.get(apiRegex + objectIdRegex, function(request, response) {
 app.get('/' + objectIdRegex + '/[0-9]{4}[/\-][0-9]{2}[/\-][0-9]{2}[/\-][a-zA-Z0-9\-]*', function(request, response) {
 	var parts = request.url.split('/');
 	parts.shift();
-	var streamId = parts.shift();
-	console.log(parts);
-	var query = new Parse.Query(StreamItem);
+	var streamId = parts.shift(),
+			query = new Parse.Query(StreamItem);
 	query.equalTo('shortcode', parts.join('/'));
+	query.equalTo('stream.objectId',streamId);
 	query.first({
 		success: function(item) {
 			response.json(item);
@@ -79,7 +88,12 @@ app.listen();
 
 // Get a stream by a given stream ID
 Parse.Cloud.define("stream", function(request, response) {
-	Stream.stream(request.params, response);
+	Stream.stream(request.params, {
+		success: function(out) {
+			response.success(out.json.items);
+		},
+		error: response.error,
+	});
 });
 
 // Tag a URL?
@@ -140,3 +154,6 @@ Parse.Cloud.beforeSave("StreamItem", function(request, response) {
 	request.object.fork(response);
 });
 
+Parse.Cloud.beforeSave(Stream, function(request, response) {
+	request.object.populate(response);
+});

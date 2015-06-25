@@ -90,7 +90,13 @@ var Content = Parse.Object.extend("Content", {
         matches = (this.get('canonicalSearchString') || '').match(new RegExp(matchRegex, 'gi')),
         matchCount =  matches && matches.length > 0 ? matches.length : 1;
     for (var k in keys) {
-      item.set(keys[k], this.get(k));
+      if (this.has(k)) {
+        item.set(keys[k], this.get(k));
+      }
+    }
+    if (this.has('redirectUrl')) {
+      // Bypass the 301 all together... TODO: consider making this an optional Fork?
+      item.set('url', this.get('redirectUrl'));
     }
     var date = (new Date()).toISOString().slice(0,10),
         name = CCObject.canonicalTag(this.get('title')).replace(/\s/g,'-').toLowerCase();
@@ -256,7 +262,7 @@ var Content = Parse.Object.extend("Content", {
 
         var headers = metaTags.headers || {};
         if (headers.location) {
-          self.set('url',headers.location);
+          self.set('redirectUrl',headers.location);
         }
       }
       // Stash Prismatic data

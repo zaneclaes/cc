@@ -1,6 +1,6 @@
 var CCObject = require('cloud/libs/CCObject');
 
-exports.defaultTimeout = 1000 * 60 * 15; // 15 Minutes...
+exports.defaultMaxAge = 1000 * 60 * 15; // 15 Minutes...
 
 function normalizeKeys(obj) {
 	var ret = {};
@@ -17,7 +17,7 @@ exports.httpCachedRequest = function(options) {
 			method = options.method || 'GET',
 			key = options.key || (method + options.url),
 			ContentClass = Parse.Object.extend(parseClassName),
-			timeout = parseInt(options.timeout || exports.defaultTimeout),
+			maxAge = parseInt(options.maxAge || exports.defaultMaxAge),
   		query = new Parse.Query(parseClassName),
   		validateForCaching = options.cacheValidation || function(obj) {
         return options.html || obj ? true : false;
@@ -78,7 +78,7 @@ exports.httpCachedRequest = function(options) {
       row = r;// Upscope it, intentionally.
   		var updatedAt = row ? row.updatedAt.getTime() : 0,
   				age = new Date().getTime() - updatedAt;
-  		if (row && validateForCaching(row.get('obj')) && (timeout < 0 || age < timeout)) {
+  		if (row && validateForCaching(row.get('obj')) && (maxAge < 0 || age < maxAge)) {
 	  		//console.log('cache hit: '+ key);
   			callback(row);
   		}
