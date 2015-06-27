@@ -71,19 +71,55 @@ var Delta = Parse.Object.extend("Delta", {
           for(var r in ops.results) {
             res = CCObject.arrayUnion(res, ops.results[r]);
           }
-          self.gateContent(res, stream, options);
+          self.gateStreamItems(stream, res, options);
         });
       },
       error: options.error,
     });
   },
   /**
-   * The array of content has been saved to the stream after a fetch
-   * Now we need to choose which content is actually rendered, based
-   * on score.
+   * The array of content has been created, but not saved.
+   * Now we need to go through and determine what content
+   * should be allowed into the stream. We *SAVE* all of it,
+   * but first we choose statuses based upon
    */
-  gateContent: function(content, stream, options) {
-    options.success(content);
+  gateStreamItems: function(stream, items, options) {
+
+    // Score the items based upon delta modifications
+    var self = this,
+        deltaWeight = this.get('weight') || 1,
+        limit = this.get('limit') || items.length,
+        rate = this.get('rate') || 0,
+        hostWeights = this.get('hostWeights') || {};
+    for (var i in items) {
+      var item = items[i],
+          baseScore = item.get('contentScore') || item.get('score'),
+          matchCount = item.get('matchCount') || 1,
+          host = item.get('host') || '',
+          hostWeight = parseFloat(hostWeights[host] || 1),
+          score = baseScore * matchCount * matchCount * deltaWeight * hostWeight;
+      item.set('score', score);
+    }
+
+    // Sort the items and apply the gated flag based upon limit
+    CCObject.log('[Delta] gating down to '+limit, 3);
+    items = items.sort(function(a, b){
+      return (b.get('score') || 0) - (a.get('score') || 0);
+    });
+    for (var i=0; i<limit && i<items.length; i++) {
+      items[i].set('status', StreamItem.STATUS_GATED);
+    }
+
+    Parse.Object.saveAll(items, {
+      success: function(saved) {
+        if (rate > 0) {
+          var nextFetchTime = (new Date()).getTime() + rate;
+          self.set('nextFetch', new Date(nextFetchTime));
+        }
+        options.success(items);
+      },
+      error: options.error,
+    });
   },
   /**
    * Fetches posts for the stream from the Content table

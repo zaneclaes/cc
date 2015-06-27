@@ -99,8 +99,10 @@ var Content = Parse.Object.extend("Content", {
       item.set('url', this.get('redirectUrl'));
     }
     var date = (new Date()).toISOString().slice(0,10),
-        name = CCObject.canonicalTag(this.get('title')).replace(/\s/g,'-').toLowerCase();
-    item.set('score', matchCount * matchCount * item.get('score'));
+        name = CCObject.canonicalTag(this.get('title')).replace(/\s/g,'-').toLowerCase(),
+        score = item.get('score') || 0;
+
+    item.set('contentScore', score); // original score preservation; delta will modify
     item.set('shortcode',date+'-'+name);
     item.set('matches', matches);
     item.set('matchCount', matchCount);

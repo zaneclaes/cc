@@ -23,10 +23,17 @@ var StreamItem = Parse.Object.extend("StreamItem", {
 	fork: function(options) {
 		var self = this,
 				forkMap = {},
-				forkIds = self.get('pendingForkIds');
+				forkIds = self.get('pendingForkIds'),
+        status = self.get('status'),
+        success = options && options.success ? options.success : function(){};
 
-		if(!forkIds || !forkIds.length) {
-      if(options && options.success) options.success();
+    options.success = function(res) {
+      // Any final sanitization? Do it here.
+      success();
+    }
+
+		if(status !== StreamItem.STATUS_GATED || !forkIds || !forkIds.length) {
+      options.success();
       return;
 		}
 
@@ -40,7 +47,12 @@ var StreamItem = Parse.Object.extend("StreamItem", {
           return;
         }
         self.set('status', StreamItem.STATUS_FORKED); // Will only be committed if this all succceds.
-        Fork.forkStreamItem(self, forks, options);
+
+        // Sort the forks based on our own forkIds, to preserve order.
+        var sortedForks = forks.sort(function(a, b){
+          return forkIds.indexOf(a.id) - forkIds.indexOf(b.id);
+        });
+        Fork.forkStreamItem(self, sortedForks, options);
       },
       error: options.error,
     })
@@ -51,6 +63,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
 	// @Class
   STATUS_PENDING: "rejected",    // Stream owner rejected content; do not show in queries.
   STATUS_FORKED: "forked",       // Fork job complete. Ready for display.
+  STATUS_GATED: "gated",         // The delta decided this should not be displayed.
 
   STREAM_STATUSES: ["forked"],   // On a standard Stream query, which statuses are acceptable?
 
@@ -99,16 +112,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
 	        }
         }
         CCObject.log('[ItemFactory] builds to save: '+toSave.length, 3);
-        if (toSave.length <= 0) {
-          options.success(built);
-          return;
-        }
-        Parse.Object.saveAll(toSave, {
-          success: function(saved) {
-            options.success(built);
-          },
-          error: options.error,
-        });
+        options.success(toSave);
       },
       error: options.error,
     });

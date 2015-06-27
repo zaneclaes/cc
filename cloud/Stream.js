@@ -42,13 +42,15 @@ var Stream = Parse.Object.extend("Stream", {
       error: options.error,
     });
   },
+  // Internal: called by present once population is complete.
   _present: function(options) {
-    var scrub = ['populationIndex','lastPopulation','presentedAt'],
+    var self = this,
+        query = new Parse.Query(StreamItem),
+        scrub = ['populationIndex','lastPopulation','presentedAt'],
         out = {
           'json' : CCObject.scrubJSON(this, scrub),
           'stream': this
-        },
-        query = new Parse.Query(StreamItem);
+        };
     query.equalTo('stream',this);
     query.lessThan('holdDate',new Date());
     query.containedIn('status',StreamItem.STREAM_STATUSES);
@@ -57,11 +59,33 @@ var Stream = Parse.Object.extend("Stream", {
     query.descending('createdAt');
     query.find({
       success: function(items) {
+        var seen = [],
+            dupes = [];
         out.json.items = [];
         for (var i in items) {
+          var r = items[i].get('relationship');
+          if (seen.indexOf(r) >= 0) {
+            dupes.push(items[i]);
+            continue;
+          }
           out.json.items.push(items[i].present());
+          seen.push(r);
         }
-        options.success(out);
+        self._dedupe(dupes, out, options);
+      },
+      error: options.error,
+    });
+  },
+  // Internal: after present, dupes are an array of StreamItems that should be deleted.
+  _dedupe: function(dupes, output, options) {
+    if (dupes.length <= 0) {
+      options.success(output);
+      return;
+    }
+    CCObject.log('[Stream '+this.id+'] de-duping x'+dupes.length,3);
+    Parse.Object.destroyAll(dupes, {
+      success: function() {
+        options.success(output);
       },
       error: options.error,
     });
@@ -130,6 +154,7 @@ var Stream = Parse.Object.extend("Stream", {
     var self = this,
         query = new Parse.Query(Delta);
     query.equalTo('streamId',this.id);
+    query.lessThanOrEqualTo('nextFetch', new Date());
     query.find({
       success: function(deltas) {
         var ops = new OpQueue();

@@ -169,6 +169,13 @@ Parse.Cloud.beforeSave("StreamItem", function(request, response) {
 	request.object.fork(response);
 });
 
+Parse.Cloud.beforeSave("Delta", function(request, response) {
+  if (!request.object.has('nextFetch')) {
+    request.object.set('nextFetch', new Date());
+  }
+  response.success();
+});
+
 Parse.Cloud.beforeSave(Stream, function(request, response) {
 	request.object.populate(response);
 });
