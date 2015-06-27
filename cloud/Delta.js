@@ -69,7 +69,7 @@ var Delta = Parse.Object.extend("Delta", {
         ops.run(function(ops){
           var res = [];
           for(var r in ops.results) {
-            res = CCObject.arrayUnion(res, ops.results[r]);
+            res = CCObject.arrayUnion(res, ops.results[r] || []);
           }
           self.gateStreamItems(stream, res, options);
         });
@@ -84,6 +84,11 @@ var Delta = Parse.Object.extend("Delta", {
    * but first we choose statuses based upon
    */
   gateStreamItems: function(stream, items, options) {
+
+    if (items.length <= 0) {
+      options.success(items);
+      return;
+    }
 
     // Score the items based upon delta modifications
     var self = this,
@@ -215,8 +220,20 @@ var Delta = Parse.Object.extend("Delta", {
    * inject static content if dynamic did not meet the delta goals/limits.
    */
   fetchStatic: function(sources, stream, options) {
-    CCObject.log("[Delta] WARNING: fetchStatic is not implemented...",10);
-    options.success([]);
+    var self = this,
+        query = new Parse.Query(Content),
+        limit = 1;
+    query.containedIn("source",sources);
+    query.equalTo("static",true);
+    query.descending("score");
+    query.limit(limit);
+    query.find({
+      success: function(contents) {
+        CCObject.log('[Delta] found statics: '+contents.length,3);
+        StreamItem.factory(stream, self, contents, options);
+      },
+      error: options.error,
+    });
   },
   /**
    * Return a regex string for the stream

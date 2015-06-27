@@ -26,6 +26,10 @@ exports.ingestSource = function(source, options) {
 	else if (type === 'rss') {
 		Rss.ingest(options);
 	}
+	else if (type === 'static') {
+		// NOP : static sources generate during the Delta
+		options.success([]);
+	}
 	else {
 		return false;
 	}
