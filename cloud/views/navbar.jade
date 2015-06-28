@@ -1,0 +1,46 @@
+.navbar-wrapper
+  .container
+    .navbar.navbar-inverse.navbar-static-top(role='navigation')
+      .container
+        .navbar-header
+          button.navbar-toggle(type='button', data-toggle='collapse', data-target='.navbar-collapse')
+            span.sr-only Toggle navigation
+            span.icon-bar
+            span.icon-bar
+            span.icon-bar
+          a.navbar-brand(href='#{root}')
+           img(src='#{pathToAssets}/docs/apple-touch-icon.png', width=30, height=30, style="float: left; margin-top: -4px; margin-right: 14px;")
+           span Deltas.io
+        .navbar-collapse.collapse
+          ul.nav.navbar-nav
+            li(class=page === "index" ? "active" : "")
+              a(href='#{root}') Home
+            li(class=page === "about" ? "active" : "")
+              a(href='#{root}about') About
+            li(class=page === "contact" ? "active" : "")
+              a(href='#{root}contact') Contact
+          ul.nav.navbar-nav.pull-right
+            if user
+              li.dropdown(class=page === "account" ? "active" : "")
+                a.dropdown-toggle(href='#', data-toggle='dropdown')
+                  span.fa.fa-user.fa-fw
+                  span.caret
+                ul.dropdown-menu(role='menu')
+                  li.dropdown-header #{user.username}
+                  li
+                    a(href='#{root}account#streams')
+                      span.fa.fa-fw.fa-rss
+                      span Streams
+                  li.divider
+                  li
+                    a(href='#{root}account#preferences')
+                      span.fa.fa-fw.fa-user
+                      span Preferences
+                  li
+                    a(href='#{root}logout')
+                      span.fa.fa-fw.fa-arrow-circle-o-right
+                      span Logout
+            else
+              li
+                a(href='/login') Login
+// /.navbar

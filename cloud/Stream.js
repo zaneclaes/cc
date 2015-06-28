@@ -45,6 +45,7 @@ var Stream = Parse.Object.extend("Stream", {
   // Internal: called by present once population is complete.
   _present: function(options) {
     var self = this,
+        statuses = options.statuses || StreamItem.STREAM_STATUSES,
         query = new Parse.Query(StreamItem),
         scrub = ['populationIndex','lastPopulation','presentedAt'],
         out = {
@@ -53,7 +54,7 @@ var Stream = Parse.Object.extend("Stream", {
         };
     query.equalTo('stream',this);
     query.lessThan('holdDate',new Date());
-    query.containedIn('status',StreamItem.STREAM_STATUSES);
+    query.containedIn('status',statuses);
     query.limit(options.limit);
     query.skip(options.offset);
     query.descending('createdAt');

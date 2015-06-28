@@ -9,24 +9,27 @@ var isLocal = typeof __dirname !== 'undefined',
     Stream = require('cloud/Stream').Stream,
     StreamItem = require('cloud/StreamItem').StreamItem,
     express = require('express'),
+    parseExpressHttpsRedirect = require('parse-express-https-redirect'),
+  	parseExpressCookieSession = require('parse-express-cookie-session'),
     apiRegex = '/api/v[0-9]{1}/',
+    usernameRegex = '[a-zA-Z\.\-]{3,16}',
     objectIdRegex = '[a-zA-Z0-9]{8,12}'; // I think this is always 10, but left some fudge
 
 var app = null;
 
-exports.apiMiddleware = function(req, res, next) {
+/***************************************************************************************
+ * API
+ ***************************************************************************************/
+
+function apiMiddleware(req, res, next) {
 	var vparts = req.url.match(apiRegex),
 			vstr = vparts && vparts.length > 0 ? vparts[0] : '/v1/';
 	req.apiVersion = parseInt(vstr.substring(2));
 	next();	
 }
 
-/**
- * Register all the API endpoints
- */
 function registerAPI() {
-  // Some API matching middleware
-	app.use(exports.apiMiddleware);
+	app.use(apiMiddleware);
 
 	// GET /streams/:id
 	app.get(apiRegex + 'streams/' + objectIdRegex, function(request, response) {
@@ -83,42 +86,165 @@ function registerAPI() {
 	});
 }
 
-/**
- *
+/***************************************************************************************
  * WEB
- *
- */
+ ***************************************************************************************/
+function assignJadeVariables(req, res, next) {
+  // req: headers, url, signedCookies, method, ip, ips, subdomains, path, host, protocol
+  req.vars = {
+    root: req.protocol+'://'+req.host+'/',
+    user: null,
+    pathToAssets: '',
+  };
+  next();
+}
+
+function renderWebpage(page, req, res) {
+  req.vars.page = page;
+	var render = function() {
+		if (req.streams) {
+			req.vars.streams = JSON.parse(JSON.stringify(req.streams));
+		}
+		res.render(page+'.jade', req.vars, function(err, html) {
+			if (err && !html) {
+				html = '<br><br><br><br><div class="container">';
+				html += '<p>There was an error compiling "'+page+'.jade"</p>';
+				html += '<code>' + JSON.stringify(err) + '</code>';
+				html += '</div>';
+			}
+			req.vars.pageContents = html;
+			res.render('main.jade', req.vars);
+		});	
+	}
+
+	if (Parse.User.current()) {
+		Parse.User.current().fetch().then(function(user) {
+			req.user = user;
+			req.vars.user = user ? JSON.parse(JSON.stringify(user)) : null;
+			if (req.streams) {
+				render();
+				return;
+			}
+			var query = new Parse.Query(Stream);
+			query.equalTo('user',user);
+			return query.find();
+		}).then(function(streams){
+			req.streams = streams;
+			render();
+		});
+	}
+	else {
+		render();
+	}
+}
+
+function renderLoginError(error, res) {
+	res.redirect('/login');
+}
+
+function requireLogin(req, res, next) {
+	if (!Parse.User.current()) {
+		renderLoginError("You must be logged in to do that.", res);
+	}
+	else {
+		next();
+	}
+}
+
+function loadStream(req, res, next) {
+  var query = new Parse.Query(Stream),
+      streamId = req.url.split('/')[2];
+  query.equalTo('user',Parse.User.current());
+  query.equalTo('objectId',streamId);
+  query.first().then(function(stream) {
+    if (stream) {
+      req.stream = stream;
+      req.vars.stream = JSON.parse(JSON.stringify(req.stream));
+      req.vars.title = req.stream.get('name');
+
+      var query = new Parse.Query(Delta);
+      query.equalTo('streamId',streamId);
+      return query.find();
+    }
+    else {
+      renderWebpage('404', req, res);
+    }
+  }).then(function(deltas) {
+    req.deltas = deltas;
+    req.vars.deltas = JSON.parse(JSON.stringify(deltas));  
+    req.vars.deltasStr = JSON.stringify(deltas);  
+    next();
+  });
+}
+
 function registerWeb() {
+	var titleMap = {
+		  	index: "Surface What's Good",
+		  	about: "About Deltas.io",
+		  	contact: "Contact",
+		  	login: "Login to your Account",
+		  	account: "Account Settings",
+		  },
+		  requiresLogin = ['account'];
+
+  app.use(assignJadeVariables);
+
+	// Login
+  app.post('/login', function(req, res) {
+  	Parse.User.logIn(req.body.username, req.body.password, {
+  		success: function(user) {
+	  		res.redirect('/account');
+  		},
+  		error: function(user, error) {
+  			res.redirect('/login');
+  		}
+  	});
+  });
+
+ 	// Logout
+  app.get('/logout', function(req, res) {
+		Parse.User.logOut();
+    res.redirect('/');
+  });
+
+  // Stream Main Page
+  app.get('/streams/'+objectIdRegex, requireLogin, assignJadeVariables, loadStream, function(req, res) {
+    renderWebpage('stream', req, res);
+  });
+  app.get('/streams/'+objectIdRegex+'/deltas', requireLogin, assignJadeVariables, loadStream, function(req, res) {
+    type = req.url.split('/')[3];
+    res.render(type+'.jade', req.vars);
+  });
+
+  // Generic Page Renderer
+	app.use(function(req, res) {
+		page = req.url.split('/')[1];
+		page = page && page.length > 0 ? page : 'index';
+		if (!titleMap[page]) {
+			page = '404';
+		}
+		if (requiresLogin.indexOf(page) >= 0 && !Parse.User.current()) {
+			page = 'login';
+		}
+    req.vars.title = titleMap[page];
+		renderWebpage(page, req, res);
+	});
+}
+
+/***************************************************************************************
+ * LISTEN
+ ***************************************************************************************/
+exports.listen = function() {
+	app = express();
   app.engine('jade', require('jade').__express);
   app.engine('ejs', require('ejs').__express);
   app.set('views', 'cloud/views');
-  app.set('view engine','jade');	
+  app.set('view engine','jade');
+  app.use(parseExpressHttpsRedirect());  // Require user to be on HTTPS.
+  app.use(express.bodyParser());
+  app.use(express.cookieParser('298oeuhd91hrajoe89g1234h9k09812'));
+  app.use(parseExpressCookieSession({ cookie: { maxAge: 3600000 } }));
 
-	app.get('/', function(request, response) {
-		response.render('index.jade', { pathToAssets: '', pathToSelectedTemplateWithinBootstrap: 'docs/examples/carousel' });
-	});
-
-	//
-	// POST /ingest { Content }
-	// For RSS Ingestion: https://github.com/mapkyca/ifttt-webhook
-	//
-	/*
-	app.post(apiRegex + 'ingest', function(req, res){
-		var Post = Parse.Object.extend("Post"),
-				post = new Post();
-		post.set('url',req.url);
-		post.set('params',req.params);
-		post.set('query',req.query);
-		post.set('body',req.body);
-		post.set('headers',req.headers);
-		post.save().then(function(){
-		  res.json(post);
-		});
-	});*/
-}
-
-exports.listen = function() {
-	app = express();
 	registerAPI();
 	registerWeb();
 	app.listen();

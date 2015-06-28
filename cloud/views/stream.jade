@@ -1,0 +1,38 @@
+.container
+  .row-fluid
+    .span12.top
+      h1
+        span.fa.fa-fw.fa-rss
+        span #{stream.name}
+      .tabbable
+        ul.nav.nav-tabs(id="stream-tabs")
+          li.dropdown
+            a.dropdown-toggle(href='#',data-toggle="dropdown")
+              span.fa.fa-fw.fa-filter(id="stream-deltas-icon")
+              span Deltas
+              b.caret
+            ul.dropdown-menu
+              each delta in deltas
+                li
+                  a.hashable(href='#delta-#{delta.objectId}') #{delta.name}
+              li
+                a.hashable(href='#delta-new') New Delta
+          li
+            a.hashable(href='#preview')
+              span.fa.fa-fw.fa-eye(id="stream-preview-icon")
+              span Preview
+          li
+            a.hashable(href='#integration')
+              span.fa.fa-fw.fa-share-alt(id="stream-integration-icon")
+              span Integration
+        .tab-content(id="stream",data-stream-id="#{stream.objectId}")
+          .tab-pane(id="delta")
+            each delta in deltas
+              .delta(id="delta-#{delta.objectId}")
+                include ./delta.jade
+            .delta(id="delta-new")
+              p New Delta?
+          .tab-pane(id="preview")
+          .tab-pane(id="integration")
+// /.container
+script(src='#{pathToAssets}/dist/js/stream.js')
