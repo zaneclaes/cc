@@ -13,24 +13,24 @@ body, h2, h3, h4, h5, h6, .h2, .h3, .h4, .h5, .h6 {
 	border-color: #1B325F;	
 }
 .bg-image {
-    position: relative;
+  position: relative;
 }
 .bg-image img {
-    display: block;
-    width: 100%;
-    max-width: 1200px; /* corresponds to max height of 450px */
-    margin: 0 auto;
+  display: block;
+  width: 100%;
+  max-width: 1200px; /* corresponds to max height of 450px */
+  margin: 0 auto;
 }
 .bg-image h1 {
-    position: absolute;
-    text-align: center;
-    bottom: 30px;
-    left: 0;
-    right: 0;
-    color: white;
+  position: absolute;
+  text-align: center;
+  bottom: 30px;
+  left: 0;
+  right: 0;
+  color: white;
 }
 .nav, .main {
-    text-align: center;
+  text-align: center;
 }
 code {
   word-wrap: break-word;
@@ -38,7 +38,12 @@ code {
 .fa-attn {
   color: #9CC4E4;
 }
-
+code {
+  color: #F26C4F;
+}
+a {
+  color: #3A89C9;
+}
 
 /* GLOBAL STYLES
 -------------------------------------------------- */

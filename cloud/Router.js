@@ -100,7 +100,52 @@ function getJadeVariables(req) {
     streamDeltas: false,
   };
 }
-
+/**
+ * Middleware
+ * Knows that /stream_items/123 => Query("StreamItem").id == 123
+ * Assigns the object to req.StreamItem
+ */
+function restfulObjectLookup(querySetupFunc, postFindFunc) {
+  return function(req, res, next) {
+    var parts = req.url.split('/'),
+        objectType = parts.length > 1 ? parts[1] : null,
+        objectId = parts.length > 2 ? parts[2] : null;
+    if (!objectType || !objectId || objectType.length <= 0 || objectId.length <= 0) {
+      res.error('Object ID lookup failed');
+      return;
+    }
+    var objectTypeParts = objectType.split('_'),
+        KlassName = '';
+    for (o in objectTypeParts) {
+      var string = objectTypeParts[o].toLowerCase();
+      KlassName += string.charAt(0).toUpperCase() + string.slice(1);
+    }
+    KlassName = KlassName.slice(0,KlassName.length-1);
+    var query = new Parse.Query(KlassName);
+    query.equalTo('objectId',objectId);
+    if (querySetupFunc) {
+      querySetupFunc(query);
+    }
+    query.first({
+      success: function(model) {
+        if (!model) {
+          res.error('No object existed for '+KlassName+'::'+objectId);
+        } else {
+          var objectTypeSing = objectType.slice(0, objectType.length-1);
+          req[objectTypeSing] = model;
+          req.vars[objectTypeSing] = JSON.parse( JSON.stringify( model ) );
+          if (postFindFunc) {
+            postFindFunc(req[objectTypeSing], next);
+          }
+          else {
+            next();
+          }
+        }
+      },
+      error: res.error,
+    });
+  }
+}
 function renderWebpage(page, req, res) {
   req.vars.page = page;
 	var render = function() {
@@ -146,7 +191,10 @@ function renderWebpage(page, req, res) {
 function renderLoginError(error, res) {
 	res.redirect('/login');
 }
-
+/**
+ * Errors if the user is not logged in
+ * Also assigns streams, pending, deltas, stream, streamDeltas
+ */
 function requireLogin(req, res, next) {
   req.vars = getJadeVariables(req);
 	if (!Parse.User.current()) {
@@ -157,8 +205,9 @@ function requireLogin(req, res, next) {
   var query = new Parse.Query(Stream),
       urlParts = req.url.split('/'),
       streamId = urlParts.length >= 3 && urlParts[1] === 'streams' ? urlParts[2] : null;
+
+  // Start by loading all the user's streams
   query.equalTo('user',Parse.User.current());
-  //query.equalTo('objectId',streamId);
   query.find().then(function(streams) {
     req.streams = streams;
     var stream = null,
@@ -171,13 +220,13 @@ function requireLogin(req, res, next) {
       streamIds.push(streams[s].id);
     }
     if (streamId) {
+      // If we're at a /streams/:id endpoint, either assign the stream or error if it's not found
       if (stream) {
         req.stream = stream;
         req.vars.stream = JSON.parse(JSON.stringify(req.stream));
         req.vars.title = req.stream.get('name');
       }
       else {
-        console.log('no stream found for '+streamId);
         renderWebpage('404', req, res);
         return null;
       }
@@ -213,36 +262,6 @@ function requireLogin(req, res, next) {
   });
 }
 
-function restfulObjectLookupMiddleware(req, res, next) {
-  var parts = req.url.split('/'),
-      objectType = parts.length > 1 ? parts[1] : null,
-      objectId = parts.length > 2 ? parts[2] : null;
-  if (!objectType || !objectId || objectType.length <= 0 || objectId.length <= 0) {
-    res.error('Object ID lookup failed');
-    return;
-  }
-  var objectTypeParts = objectType.split('_'),
-      KlassName = '';
-  for (o in objectTypeParts) {
-    var string = objectTypeParts[o].toLowerCase();
-    KlassName += string.charAt(0).toUpperCase() + string.slice(1);
-  }
-  KlassName = KlassName.slice(0,KlassName.length-1);
-  var query = new Parse.Query(KlassName);
-  query.equalTo('objectId',objectId);
-  query.first({
-    success: function(model) {
-      if (!model) {
-        res.error('No object existed for '+KlassName+'::'+objectId);
-      } else {
-        req.model = model;
-        next();
-      }
-    },
-    error: res.error,
-  });
-}
-
 function registerWeb() {
 	// Login
   app.post('/login', function(req, res) {
@@ -263,27 +282,35 @@ function registerWeb() {
   });
 
   // Stream Main Page
+  app.get('/streams', requireLogin, function(req, res) {
+    req.vars.title = "Streams";
+    renderWebpage('streams', req, res);
+  });
   app.get('/streams/'+objectIdRegex, requireLogin, function(req, res) {
     renderWebpage('stream', req, res);
   });
   app.get('/streams/'+objectIdRegex+'/deltas', requireLogin, function(req, res) {
-    type = req.url.split('/')[3];
-    res.render(type+'.jade', req.vars);
+    res.render('deltas.jade', req.vars);
   });
   app.get('/scheduled', requireLogin, function(req, res) {
     renderWebpage('scheduled', req, res);
   });
 
   // Modify a stream item
-  app.post('/stream_items/'+objectIdRegex, restfulObjectLookupMiddleware, function(req, res) {
+  app.post('/stream_items/'+objectIdRegex, requireLogin, restfulObjectLookup(function(query) {
+    query.include('stream');
+  }), function(req, res) {
     var params = Object.keys(req.body),
+        stream = req.stream_item ? req.stream_item.get('stream') : false,
         accepted = params.indexOf('accept') >= 0,
         rejected = params.indexOf('reject') >= 0;
-    // TODO: Build user check into restfulObjectLookupMiddleware, or as another middleware
-    if (accepted || rejected) {
+
+    if (!stream || stream.get('user').id !== Parse.User.current().id) {
+      renderWebpage('404', req, res);
+    } else if (accepted || rejected) {
       var status = accepted ? StreamItem.STATUS_ACCEPTED : StreamItem.STATUS_REJECTED;
-      req.model.set('status',status);
-      req.model.save({
+      req.stream_item.set('status',status);
+      req.stream_item.save({
         success: function(obj) {
           res.redirect('/scheduled');
         },
@@ -300,11 +327,8 @@ function registerWeb() {
   // Generic Page Renderer
   var titleMap = {
         index: "Surface What's Good",
-        about: "About Deltas.io",
-        contact: "Contact",
         login: "Login to your Account",
-        account: "Account Settings",
-        streams: "Streams",
+        account: "Account Preferences",
       },
       allowedPages = Object.keys(titleMap);
   var genericRenderer = function(req, res) {

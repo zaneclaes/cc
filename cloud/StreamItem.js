@@ -15,7 +15,6 @@ var StreamItem = Parse.Object.extend("StreamItem", {
     return CCObject.scrubJSON(this, ['holdDate','operations','relationship','matches','status','delta','stream',
                                      'publisher','pendingForkIds','forkResults']);
   },
-
 	/**
 	 * Before Save
 	 * Shortens the URL, etc.
@@ -62,7 +61,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
 }, {
 	// @Class
   STATUS_ACCEPTED: "accepted",   // Accepted by user; don't show in schedule
-  STATUS_PENDING: "rejected",    // Stream owner rejected content; do not show in queries.
+  STATUS_REJECTED: "rejected",   // Stream owner rejected content; do not show in queries.
   STATUS_FORKED: "forked",       // Fork job complete. Ready for display.
   STATUS_GATED: "gated",         // The delta decided this should not be displayed.
 
