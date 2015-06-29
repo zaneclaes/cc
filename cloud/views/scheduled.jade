@@ -1,0 +1,17 @@
+.container
+  .row-fluid
+    .span12.top
+      h1 Scheduled Posts
+      if pendingCount == 0
+        p Nothing pending! Add more streams, or loosen your delta rules.
+      else
+        ul
+          each item in pending
+            li 
+              h4
+                a(href="#{item.originalUrl}",target="_blank") #{item.title}
+              code #{item.url}
+              p #{item.text}
+              form(method="post",action="/stream_items/#{item.objectId}")
+                button.btn.btn-danger(type='submit',name='reject') Reject
+                button.btn.btn-success.pull-right(type='submit',name='accept') Accept

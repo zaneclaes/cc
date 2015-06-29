@@ -1,10 +1,23 @@
-br
-br
-br
-br
-form(method="post",action="/login")
-  label Username
-  input(name="username")
-  label Password
-  input(name="password", type="password")
-  input.button(type="submit",value="Log In")
+.row-fluid
+  .span12.top
+    .container
+      br
+      .col-md-5.col-md-offset-4
+        .panel.panel-default.center
+          .panel-heading
+            h3.panel-title
+              strong Sign In 
+          .panel-body
+            form(role='form',action='/login',method='POST')
+              .form-group
+                label(for='username') Username or Email
+                input#username.form-control(type='text', placeholder='username or email',name='username')
+              .form-group
+                label(for='password')
+                  | Password 
+                  a(href='/password') (forgot password)
+                input#password.form-control(type='password', placeholder='password',name='password')
+              button.btn.btn-sm.btn-default.pull-right(type='submit') Login
+        p
+          i
+            center Delta.io is currently closed to new users

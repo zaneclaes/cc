@@ -9,10 +9,15 @@ function loadHash(hash) {
         icon.removeClass("fa-circle-o-notch").removeClass("fa-spin").addClass(iconClass); 
       },
       loadHash = function() {
+        if(container.children().length > 0) {
+          return;
+        }
         icon.removeClass(iconClass).addClass("fa-circle-o-notch fa-spin");
         container.load('/streams/'+streamId+'/'+h, restoreClass);
       };
   if (hash === '#preview') {
+    container.empty();
+    $('body').scrollTop();
     icon.removeClass(iconClass).addClass("fa-circle-o-notch fa-spin");
     $.getJSON('/api/v1/streams/' + streamId, function( data ) {
       container.append('<code>'+ JSON.stringify(data) + '</code>');
@@ -23,10 +28,38 @@ function loadHash(hash) {
     $('#stream').children().removeClass('active');
     $('#delta').addClass('active').children().css({'display':'none'});
     $(hash).css({'display':''});
+  } else if(hash === '#integration') {
+    // NOP
   } else {
     loadHash();
   }
 }
+
+$.fn.OneClickSelect = function () {
+  return $(this).on('click', function () {
+
+    // In here, "this" is the element
+
+    var range, selection;
+
+    // non-IE browsers account for 60% of users, this means 60% of the time,
+    // the two conditions are evaluated since you check for IE first. 
+
+    // Instead, reverse the conditions to get it right on the first check 60% of the time.
+
+    if (window.getSelection) {
+      selection = window.getSelection();
+      range = document.createRange();
+      range.selectNodeContents(this);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } else if (document.body.createTextRange) {
+      range = document.body.createTextRange();
+      range.moveToElementText(this);
+      range.select();
+    }
+  });
+};
 
 $(function(){
   $('.dropdown-toggle').dropdown();
@@ -37,9 +70,8 @@ $(function(){
 
   $('.hashable').click(function (e) {
     $(this).tab('show');
-    var scrollmem = $('body').scrollTop();
     window.location.hash = this.hash;
-    $('html,body').scrollTop(scrollmem);
     loadHash(this.hash);
   });
+  $('code').OneClickSelect();
 });

@@ -61,11 +61,12 @@ var StreamItem = Parse.Object.extend("StreamItem", {
 
 }, {
 	// @Class
+  STATUS_ACCEPTED: "accepted",   // Accepted by user; don't show in schedule
   STATUS_PENDING: "rejected",    // Stream owner rejected content; do not show in queries.
   STATUS_FORKED: "forked",       // Fork job complete. Ready for display.
   STATUS_GATED: "gated",         // The delta decided this should not be displayed.
 
-  STREAM_STATUSES: ["forked"],   // On a standard Stream query, which statuses are acceptable?
+  STREAM_STATUSES: ["forked","accepted"],   // On a standard Stream query, for rendering, which statuses are acceptable?
 
   //
   // Takes an object (Either Content or...?)

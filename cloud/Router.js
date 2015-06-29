@@ -89,14 +89,16 @@ function registerAPI() {
 /***************************************************************************************
  * WEB
  ***************************************************************************************/
-function assignJadeVariables(req, res, next) {
+function getJadeVariables(req) {
   // req: headers, url, signedCookies, method, ip, ips, subdomains, path, host, protocol
-  req.vars = {
-    root: req.protocol+'://'+req.host+'/',
+  return {
+    root: req ? req.protocol+'://'+req.host+'/' : 'https://www.deltas.io/',
+    title: "Surface What's Good",
     user: null,
     pathToAssets: '',
+    pendingCount: 0,
+    streamDeltas: false,
   };
-  next();
 }
 
 function renderWebpage(page, req, res) {
@@ -114,7 +116,7 @@ function renderWebpage(page, req, res) {
 			}
 			req.vars.pageContents = html;
 			res.render('main.jade', req.vars);
-		});	
+		});
 	}
 
 	if (Parse.User.current()) {
@@ -122,15 +124,18 @@ function renderWebpage(page, req, res) {
 			req.user = user;
 			req.vars.user = user ? JSON.parse(JSON.stringify(user)) : null;
 			if (req.streams) {
-				render();
+        render();
 				return;
 			}
 			var query = new Parse.Query(Stream);
 			query.equalTo('user',user);
-			return query.find();
-		}).then(function(streams){
-			req.streams = streams;
-			render();
+			query.find({
+        success: function(streams) {
+          req.streams = streams;
+          render();
+        },
+        error: render,
+      });
 		});
 	}
 	else {
@@ -143,57 +148,107 @@ function renderLoginError(error, res) {
 }
 
 function requireLogin(req, res, next) {
+  req.vars = getJadeVariables(req);
 	if (!Parse.User.current()) {
 		renderLoginError("You must be logged in to do that.", res);
+    return;
 	}
-	else {
-		next();
-	}
-}
 
-function loadStream(req, res, next) {
   var query = new Parse.Query(Stream),
-      streamId = req.url.split('/')[2];
+      urlParts = req.url.split('/'),
+      streamId = urlParts.length >= 3 && urlParts[1] === 'streams' ? urlParts[2] : null;
   query.equalTo('user',Parse.User.current());
-  query.equalTo('objectId',streamId);
-  query.first().then(function(stream) {
-    if (stream) {
-      req.stream = stream;
-      req.vars.stream = JSON.parse(JSON.stringify(req.stream));
-      req.vars.title = req.stream.get('name');
-
-      var query = new Parse.Query(Delta);
-      query.equalTo('streamId',streamId);
-      return query.find();
+  //query.equalTo('objectId',streamId);
+  query.find().then(function(streams) {
+    req.streams = streams;
+    var stream = null,
+        streamIds = [];
+    
+    for (var s in streams) {
+      if (streamId && streams[s].id === streamId) {
+        stream = streams[s];
+      }
+      streamIds.push(streams[s].id);
     }
-    else {
-      renderWebpage('404', req, res);
+    if (streamId) {
+      if (stream) {
+        req.stream = stream;
+        req.vars.stream = JSON.parse(JSON.stringify(req.stream));
+        req.vars.title = req.stream.get('name');
+      }
+      else {
+        console.log('no stream found for '+streamId);
+        renderWebpage('404', req, res);
+        return null;
+      }
     }
+    // Find all deltas
+    var query = new Parse.Query(Delta);
+    query.containedIn('streamId',streamIds);
+    return query.find();
   }).then(function(deltas) {
+    if (streamId) {
+      req.streamDeltas = []; // Deltas for active steram
+      for (var d in deltas) {
+        if (deltas[d].get('streamId') === streamId) {
+          req.streamDeltas.push(deltas[d]);
+        }
+      }
+      req.vars.streamDeltas = JSON.parse(JSON.stringify( req.streamDeltas ));
+    }
+
     req.deltas = deltas;
     req.vars.deltas = JSON.parse(JSON.stringify(deltas));  
-    req.vars.deltasStr = JSON.stringify(deltas);  
+
+    var query = new Parse.Query(StreamItem);
+    query.containedIn('stream',req.streams);
+    query.greaterThan('holdDate', new Date());
+    query.equalTo('status',StreamItem.STATUS_FORKED);
+    return query.find();
+  }).then(function(pendingStreamItems) {    
+    req.pending = pendingStreamItems;
+    req.vars.pendingCount = pendingStreamItems.length;
+    req.vars.pending = JSON.parse(JSON.stringify(pendingStreamItems));
     next();
   });
 }
 
+function restfulObjectLookupMiddleware(req, res, next) {
+  var parts = req.url.split('/'),
+      objectType = parts.length > 1 ? parts[1] : null,
+      objectId = parts.length > 2 ? parts[2] : null;
+  if (!objectType || !objectId || objectType.length <= 0 || objectId.length <= 0) {
+    res.error('Object ID lookup failed');
+    return;
+  }
+  var objectTypeParts = objectType.split('_'),
+      KlassName = '';
+  for (o in objectTypeParts) {
+    var string = objectTypeParts[o].toLowerCase();
+    KlassName += string.charAt(0).toUpperCase() + string.slice(1);
+  }
+  KlassName = KlassName.slice(0,KlassName.length-1);
+  var query = new Parse.Query(KlassName);
+  query.equalTo('objectId',objectId);
+  query.first({
+    success: function(model) {
+      if (!model) {
+        res.error('No object existed for '+KlassName+'::'+objectId);
+      } else {
+        req.model = model;
+        next();
+      }
+    },
+    error: res.error,
+  });
+}
+
 function registerWeb() {
-	var titleMap = {
-		  	index: "Surface What's Good",
-		  	about: "About Deltas.io",
-		  	contact: "Contact",
-		  	login: "Login to your Account",
-		  	account: "Account Settings",
-		  },
-		  requiresLogin = ['account'];
-
-  app.use(assignJadeVariables);
-
 	// Login
   app.post('/login', function(req, res) {
   	Parse.User.logIn(req.body.username, req.body.password, {
   		success: function(user) {
-	  		res.redirect('/account');
+	  		res.redirect('/streams');
   		},
   		error: function(user, error) {
   			res.redirect('/login');
@@ -208,27 +263,65 @@ function registerWeb() {
   });
 
   // Stream Main Page
-  app.get('/streams/'+objectIdRegex, requireLogin, assignJadeVariables, loadStream, function(req, res) {
+  app.get('/streams/'+objectIdRegex, requireLogin, function(req, res) {
     renderWebpage('stream', req, res);
   });
-  app.get('/streams/'+objectIdRegex+'/deltas', requireLogin, assignJadeVariables, loadStream, function(req, res) {
+  app.get('/streams/'+objectIdRegex+'/deltas', requireLogin, function(req, res) {
     type = req.url.split('/')[3];
     res.render(type+'.jade', req.vars);
   });
+  app.get('/scheduled', requireLogin, function(req, res) {
+    renderWebpage('scheduled', req, res);
+  });
+
+  // Modify a stream item
+  app.post('/stream_items/'+objectIdRegex, restfulObjectLookupMiddleware, function(req, res) {
+    var params = Object.keys(req.body),
+        accepted = params.indexOf('accept') >= 0,
+        rejected = params.indexOf('reject') >= 0;
+    // TODO: Build user check into restfulObjectLookupMiddleware, or as another middleware
+    if (accepted || rejected) {
+      var status = accepted ? StreamItem.STATUS_ACCEPTED : StreamItem.STATUS_REJECTED;
+      req.model.set('status',status);
+      req.model.save({
+        success: function(obj) {
+          res.redirect('/scheduled');
+        },
+        error: function(e) {
+          res.error('could not save the obj');
+        } 
+      });
+    } else {
+      // NOP
+      res.redirect('/scheduled');
+    }
+  });
 
   // Generic Page Renderer
-	app.use(function(req, res) {
-		page = req.url.split('/')[1];
-		page = page && page.length > 0 ? page : 'index';
-		if (!titleMap[page]) {
-			page = '404';
-		}
-		if (requiresLogin.indexOf(page) >= 0 && !Parse.User.current()) {
-			page = 'login';
-		}
+  var titleMap = {
+        index: "Surface What's Good",
+        about: "About Deltas.io",
+        contact: "Contact",
+        login: "Login to your Account",
+        account: "Account Settings",
+        streams: "Streams",
+      },
+      allowedPages = Object.keys(titleMap);
+  var genericRenderer = function(req, res) {
+    req.vars = getJadeVariables(req);
+    page = req.url.split('/')[1];
+    page = page && page.length > 0 ? page : 'index';
+    console.log('generic render '+page);
+    if (!titleMap[page]) {
+      page = '404';
+    }
     req.vars.title = titleMap[page];
-		renderWebpage(page, req, res);
-	});
+    renderWebpage(page, req, res);
+  };
+  for (var k in allowedPages) {
+    app.get('/'+allowedPages[k], genericRenderer);
+  }
+  app.get('/',genericRenderer);
 }
 
 /***************************************************************************************
@@ -243,7 +336,7 @@ exports.listen = function() {
   app.use(parseExpressHttpsRedirect());  // Require user to be on HTTPS.
   app.use(express.bodyParser());
   app.use(express.cookieParser('298oeuhd91hrajoe89g1234h9k09812'));
-  app.use(parseExpressCookieSession({ cookie: { maxAge: 3600000 } }));
+  app.use(parseExpressCookieSession({ cookie: { maxAge: 14400000 } }));
 
 	registerAPI();
 	registerWeb();

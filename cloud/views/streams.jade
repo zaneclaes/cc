@@ -1,0 +1,9 @@
+.container
+  .row-fluid
+    .span12.top
+      h1 Streams
+      ul
+        each stream in streams
+          li
+            a(href="#{root}streams/#{stream.objectId}") #{stream.name}
+// ./container

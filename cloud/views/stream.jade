@@ -12,7 +12,7 @@
               span Deltas
               b.caret
             ul.dropdown-menu
-              each delta in deltas
+              each delta in streamDeltas
                 li
                   a.hashable(href='#delta-#{delta.objectId}') #{delta.name}
               li
@@ -27,12 +27,24 @@
               span Integration
         .tab-content(id="stream",data-stream-id="#{stream.objectId}")
           .tab-pane(id="delta")
-            each delta in deltas
+            each delta in streamDeltas
               .delta(id="delta-#{delta.objectId}")
-                include ./delta.jade
+                include ./delta.jade 
             .delta(id="delta-new")
-              p New Delta?
+              include ./delta-new.jade
           .tab-pane(id="preview")
           .tab-pane(id="integration")
+            h2 How To: Send a Digest Email
+            p Create a stream for your blog. Set the title to latest post. Connect to mailchimp. Pro: add quotes and other link sources.
+            h2 How To: Post to Social Media
+            p Use IFTT to connect your RSS feed
+            h2 How To: Embed in your Blog
+            p Use the Templated HTML along with your own custom CSS, and just ajax load the HTML into a div.
+            h4 RSS Feed:
+            code http://www.deltas.io/api/v1/streams/#{stream.objectId}.rss
+            h4 Templated HTML:
+            code http://www.deltas.io/api/v1/streams/#{stream.objectId}.html
+            h4 JSON:
+            code http://www.deltas.io/api/v1/streams/#{stream.objectId}.json
 // /.container
 script(src='#{pathToAssets}/dist/js/stream.js')

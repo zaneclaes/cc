@@ -12,23 +12,26 @@
            img(src='#{pathToAssets}/docs/apple-touch-icon.png', width=30, height=30, style="float: left; margin-top: -4px; margin-right: 14px;")
            span Deltas.io
         .navbar-collapse.collapse
-          ul.nav.navbar-nav
-            li(class=page === "index" ? "active" : "")
-              a(href='#{root}') Home
-            li(class=page === "about" ? "active" : "")
-              a(href='#{root}about') About
-            li(class=page === "contact" ? "active" : "")
-              a(href='#{root}contact') Contact
+          // ul.nav.navbar-nav
+          //  li(class=page === "index" ? "active" : "")
+          //    a(href='#{root}') Home
           ul.nav.navbar-nav.pull-right
             if user
-              li.dropdown(class=page === "account" ? "active" : "")
+              li.dropdown
                 a.dropdown-toggle(href='#', data-toggle='dropdown')
-                  span.fa.fa-user.fa-fw
-                  span.caret
+                  span.fa.fa-user.fa-fw.fa-attn
+                  if pendingCount > 0
+                    span.badge.badge-info #{pendingCount}
+                  else
+                    span.caret
                 ul.dropdown-menu(role='menu')
                   li.dropdown-header #{user.username}
                   li
-                    a(href='#{root}account#streams')
+                    a(href='#{root}scheduled')
+                      span.badge.badge-info #{pendingCount} 
+                      span Scheduled
+                  li
+                    a(href='#{root}streams')
                       span.fa.fa-fw.fa-rss
                       span Streams
                   li.divider
