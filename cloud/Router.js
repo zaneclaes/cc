@@ -17,6 +17,14 @@ var isLocal = typeof __dirname !== 'undefined',
 
 var app = null;
 
+function onWebError(req, res) {
+  return function(error) {
+    CCObject.log('[ERROR][WEB]',10);
+    CCObject.log(error);
+    res.error({'error' : error});
+  };
+}
+
 /***************************************************************************************
  * API
  ***************************************************************************************/
@@ -35,14 +43,9 @@ function registerAPI() {
 	app.get(apiRegex + 'streams/' + objectIdRegex, function(request, response) {
 		var parts = request.url.split('/');
 		request.params.streamId = parts[4];
-		Stream.stream(request.params, {
-			success: function(out) {
-				response.json(out.json);
-			},
-			error: function(e) {
-	      response.json({'error': e});
-	    },
-		});
+		Stream.stream(request.params, {}).then(function(out) {
+			response.json(out.json);
+		}, onWebError(request, response));
 	});
 
 	// GET /sources/:id
@@ -85,9 +88,8 @@ function registerAPI() {
 		});
 	});
 }
-
 /***************************************************************************************
- * WEB
+ * WEB HELPERS
  ***************************************************************************************/
 function getJadeVariables(req) {
   // req: headers, url, signedCookies, method, ip, ips, subdomains, path, host, protocol
@@ -100,6 +102,37 @@ function getJadeVariables(req) {
     streamDeltas: false,
   };
 }
+function renderLoginError(error, res) {
+  res.redirect('/login');
+}
+function renderWebpage(page, req, res) {
+  req.vars.page = page;
+  var render = function() {
+    if (req.streams) {
+      req.vars.streams = JSON.parse(JSON.stringify(req.streams));
+    }
+    res.render(page+'.jade', req.vars, function(err, html) {
+      if (err && !html) {
+        html = '<br><br><br><br><div class="container">';
+        html += '<p>There was an error compiling "'+page+'.jade"</p>';
+        html += '<code>' + JSON.stringify(err) + '</code>';
+        html += '</div>';
+      }
+      req.vars.pageContents = html;
+      res.render('main.jade', req.vars);
+    });
+  }
+
+  if (Parse.User.current()) {
+    populateUser(req, res, render);
+  }
+  else {
+    render();
+  }
+}
+/***************************************************************************************
+ * WEB MIDDLEWARE
+ ***************************************************************************************/
 /**
  * Middleware
  * Knows that /stream_items/123 => Query("StreamItem").id == 123
@@ -146,50 +179,23 @@ function restfulObjectLookup(querySetupFunc, postFindFunc) {
     });
   }
 }
-function renderWebpage(page, req, res) {
-  req.vars.page = page;
-	var render = function() {
-		if (req.streams) {
-			req.vars.streams = JSON.parse(JSON.stringify(req.streams));
-		}
-		res.render(page+'.jade', req.vars, function(err, html) {
-			if (err && !html) {
-				html = '<br><br><br><br><div class="container">';
-				html += '<p>There was an error compiling "'+page+'.jade"</p>';
-				html += '<code>' + JSON.stringify(err) + '</code>';
-				html += '</div>';
-			}
-			req.vars.pageContents = html;
-			res.render('main.jade', req.vars);
-		});
-	}
 
-	if (Parse.User.current()) {
-		Parse.User.current().fetch().then(function(user) {
-			req.user = user;
-			req.vars.user = user ? JSON.parse(JSON.stringify(user)) : null;
-			if (req.streams) {
-        render();
-				return;
-			}
-			var query = new Parse.Query(Stream);
-			query.equalTo('user',user);
-			query.find({
-        success: function(streams) {
-          req.streams = streams;
-          render();
-        },
-        error: render,
-      });
-		});
-	}
-	else {
-		render();
-	}
-}
-
-function renderLoginError(error, res) {
-	res.redirect('/login');
+function populateUser(req, res, next) {
+  return Parse.User.current().fetch().then(function(user) {
+    req.user = user;
+    req.vars.user = user ? JSON.parse(JSON.stringify(user)) : null;
+    if (req.streams) {
+      return req.streams; // passed into next
+    }
+    else {
+      var query = new Parse.Query(Stream);
+      query.equalTo('user',user);
+      return query.find();
+    }
+  }).then(function(streams) {
+    req.streams = streams;
+    next();
+  }, onWebError(req, res));
 }
 /**
  * Errors if the user is not logged in
@@ -197,10 +203,10 @@ function renderLoginError(error, res) {
  */
 function requireLogin(req, res, next) {
   req.vars = getJadeVariables(req);
-	if (!Parse.User.current()) {
-		renderLoginError("You must be logged in to do that.", res);
+  if (!Parse.User.current()) {
+    renderLoginError("You must be logged in to do that.", res);
     return;
-	}
+  }
 
   var query = new Parse.Query(Stream),
       urlParts = req.url.split('/'),
@@ -249,18 +255,23 @@ function requireLogin(req, res, next) {
     req.deltas = deltas;
     req.vars.deltas = JSON.parse(JSON.stringify(deltas));  
 
+    // Find all the pending stream items that are forked or accepted
     var query = new Parse.Query(StreamItem);
     query.containedIn('stream',req.streams);
-    query.greaterThan('holdDate', new Date());
-    query.equalTo('status',StreamItem.STATUS_FORKED);
+    query.greaterThan('scheduledAt', new Date());
+    query.containedIn('status',[StreamItem.STATUS_FORKED,StreamItem.STATUS_ACCEPTED]);
     return query.find();
-  }).then(function(pendingStreamItems) {    
-    req.pending = pendingStreamItems;
-    req.vars.pendingCount = pendingStreamItems.length;
-    req.vars.pending = JSON.parse(JSON.stringify(pendingStreamItems));
+  }).then(Stream.dedupe).then(function(items) {
+    req.pending = items;
+    req.vars.pendingCount = items.length;
+    req.vars.pending = JSON.parse(JSON.stringify(items));
     next();
-  });
+  }, onWebError(req, res));
 }
+
+/***************************************************************************************
+ * WEB ROUTES
+ ***************************************************************************************/
 
 function registerWeb() {
 	// Login
@@ -349,7 +360,7 @@ function registerWeb() {
 }
 
 /***************************************************************************************
- * LISTEN
+ * FINAL MAIN SETUP :: LISTEN
  ***************************************************************************************/
 exports.listen = function() {
 	app = express();

@@ -20,14 +20,21 @@ Router.listen();
 * Internal API [Cloud Functions]
  ************************************************************************************/
 
+function onApiError(req, res) {
+  return function(error) {
+    CCObject.log('[ERROR][API]',10);
+    CCObject.log(error);
+    res.error({'error' : error});
+  };
+}
+
 // Get a stream by a given stream ID
 Parse.Cloud.define("stream", function(request, response) {
-	Stream.stream(request.params, {
-		success: function(out) {
-			response.success(out.json.items);
-		},
-		error: response.error,
-	});
+	Stream.stream(request.params).then(function(out) {
+    CCObject.log('out',10);
+    CCObject.log(out,10);
+    response.success(out.json.items);
+  }, onApiError(request, response));
 });
 
 // Tag a URL?

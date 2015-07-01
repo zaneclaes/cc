@@ -13,7 +13,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
    */
   present: function() {
     return CCObject.scrubJSON(this, ['holdDate','operations','relationship','matches','status','delta','stream',
-                                     'publisher','pendingForkIds','forkResults']);
+                                     'publisher','pendingForkIds','forkResults','scheduledAt']);
   },
 	/**
 	 * Before Save
@@ -129,11 +129,11 @@ var StreamItem = Parse.Object.extend("StreamItem", {
         holdHours = parseInt(delta.get('holdHours') || 0),
         holdTime = (holdHours > 0 ? holdHours : 0) * 60 * 60 * 1000,
         timestamp = new Date().getTime() + holdTime,
-        holdDate = new Date(timestamp);
+        scheduledAt = new Date(timestamp);
     item.set('stream',stream);
     item.set('originalUrl',item.get('url'));
   	item.set('relationship', o.className+'_'+o.id);
-    item.set('holdDate',holdDate);
+    item.set('scheduledAt',scheduledAt);
     item.set('delta', delta);
     item.set('pendingForkIds',delta.get('forkIds'));
    	return item;

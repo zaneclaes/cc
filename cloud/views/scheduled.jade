@@ -2,8 +2,11 @@
   .row-fluid
     .span12.top
       h1 Scheduled Posts
+      p 
+        i If you don't approve a post before the scheduledAt date, it will automatically go live.
       if pendingCount == 0
-        p Nothing pending! Add more streams, or loosen your delta rules.
+        p 
+          b Nothing scheduled! Add more streams, or loosen your delta rules.
       else
         ul
           each item in pending
@@ -14,4 +17,4 @@
               p #{item.text}
               form(method="post",action="/stream_items/#{item.objectId}")
                 button.btn.btn-danger(type='submit',name='reject') Reject
-                button.btn.btn-success.pull-right(type='submit',name='accept') Accept
+                // button.btn.btn-success.pull-right(type='submit',name='accept') Accept

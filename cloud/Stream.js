@@ -10,8 +10,6 @@ var CCObject = require('cloud/libs/CCObject'),
 var DEFAULT_MAX_CONTENT_AGE = 1000 * 60 * 60 * 24 * 7;
 var DEFAULT_POPULATION_THROTTLE = 60000;
 
-exports.streamCache = {};
-
 var Stream = Parse.Object.extend("Stream", {
   // @Instance
 
@@ -29,17 +27,13 @@ var Stream = Parse.Object.extend("Stream", {
 
     // Rate limiting: don't populate, we've presented recently.
     if (age < DEFAULT_POPULATION_THROTTLE) {
-      self._present(options);
-      return;
+      return self._present(options);
     }
 
     // Will trigger a populate command...
     this.set('presentedAt', new Date());
-    this.save({
-      success: function() {
-        self._present(options);
-      },
-      error: options.error,
+    return this.save().then(function() {
+      return self._present(options);
     });
   },
   // Internal: called by present once population is complete.
@@ -53,42 +47,14 @@ var Stream = Parse.Object.extend("Stream", {
           'stream': this
         };
     query.equalTo('stream',this);
-    query.lessThan('holdDate',new Date());
+    query.lessThan('scheduledAt',new Date());
     query.containedIn('status',statuses);
     query.limit(options.limit);
     query.skip(options.offset);
     query.descending('createdAt');
-    query.find({
-      success: function(items) {
-        var seen = [],
-            dupes = [];
-        out.json.items = [];
-        for (var i in items) {
-          var r = items[i].get('relationship');
-          if (seen.indexOf(r) >= 0) {
-            dupes.push(items[i]);
-            continue;
-          }
-          out.json.items.push(items[i].present());
-          seen.push(r);
-        }
-        self._dedupe(dupes, out, options);
-      },
-      error: options.error,
-    });
-  },
-  // Internal: after present, dupes are an array of StreamItems that should be deleted.
-  _dedupe: function(dupes, output, options) {
-    if (dupes.length <= 0) {
-      options.success(output);
-      return;
-    }
-    CCObject.log('[Stream '+this.id+'] de-duping x'+dupes.length,3);
-    Parse.Object.destroyAll(dupes, {
-      success: function() {
-        options.success(output);
-      },
-      error: options.error,
+    return query.find().then(Stream.dedupe).then(function(items) {
+      out.json.items = items;
+      return out;
     });
   },
   /**
@@ -188,30 +154,47 @@ var Stream = Parse.Object.extend("Stream", {
    * Find the streamId, populate, and return
    */
   stream: function(params, options) {
-    var sId = params.id || params.streamId;
-    if (exports.streamCache[sId]) {
-      exports.streamCache[sId].present(options);
-      return;
-    }
-    var keys = ['limit','offset','velocity','shares'];
+    var sId = params.id || params.streamId,
+        keys = ['limit','offset','velocity','shares'];
+    options = options || {};
     for(var k in keys) {
       options[k] = params[k];
     }
 		var query = new Parse.Query(Stream);
 		query.equalTo("objectId",sId);
-		query.first({
-			success: function(stream) {
-        if (!stream) {
-          options.error({'error':'stream not found'});
-        }
-        else {
-          exports.streamCache[stream.id] = stream;
-  				stream.present(options);
-        }
-			},
-			error: options.error,
-		});
+		return query.first().then(function(stream) {
+      if (!stream) {
+        throw new Error('stream not found');
+      }
+      return stream.present(options);
+    });
 	},
+  // Internal: after present, dupes are an array of StreamItems that should be deleted.
+  dedupe: function(items) {
+    if (!items) {
+      return [];
+    }
+    var seen = [],
+        dupes = []
+        out = [];
+    for (var i in items) {
+      var r = items[i].get('relationship');
+      if (seen.indexOf(r) >= 0) {
+        dupes.push(items[i]);
+        continue;
+      }
+      out.push(items[i].present());
+      seen.push(r);
+    }
+
+    if (dupes.length <= 0) {
+      return out;
+    }
+    CCObject.log('[Stream] de-duping x'+dupes.length,3);
+    return Parse.Object.destroyAll(dupes).then(function(){
+      return out;
+    });
+  },
 });
 
 exports.Stream = Stream;
