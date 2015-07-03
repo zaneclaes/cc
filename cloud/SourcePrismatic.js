@@ -65,36 +65,34 @@ exports.ingest = function(options) {
 				'X-FirePHP-Version': '0.0.6',
 				'Origin': 'http://api.getprismatic.com',
 			};
-	CCHttp.httpCachedRequest({
+	return CCHttp.httpCachedRequest({
 		url: urlBase + token,
 		headers: headers,
 		key: sourceId,
 		cacheName: 'Prismatic',
 		cacheValidation: function(obj) {
 			return obj.docs ? true : false;
-		},
-		success: function(res) {
-			var items = res.obj.docs.items,
-					lastItem = null,
-					contentMap = {};
-			for (var x in items) {
-				lastItem = items[x];
-				contentMap[lastItem['url']] = {
-					'source' : options.source,
-					'weight' : options.source.get('weight') || 100,
-					'title' : lastItem['title'],
-					'publisher' : lastItem['publisher'],
-					'text' : lastItem['text'],
-					'tags' : extractTags(lastItem, options),
-					'images' : lastItem['images'],
-					'timestamp' : lastItem['date'],
-					//'payload' : lastItem,
-				};
-			}
-			CCObject.log('got prismatic content map page '+curPage+' from sourceId '+sourceId);
-			CCObject.log(contentMap);
-			Content.factory(contentMap, options);
-		},
-		error: options.error,
+		}
+	}).then(function(res) {
+		var items = res.obj.docs.items,
+				lastItem = null,
+				contentMap = {};
+		for (var x in items) {
+			lastItem = items[x];
+			contentMap[lastItem['url']] = {
+				'source' : options.source,
+				'weight' : options.source.get('weight') || 100,
+				'title' : lastItem['title'],
+				'publisher' : lastItem['publisher'],
+				'text' : lastItem['text'],
+				'tags' : extractTags(lastItem, options),
+				'images' : lastItem['images'],
+				'timestamp' : lastItem['date'],
+				//'payload' : lastItem,
+			};
+		}
+		CCObject.log('got prismatic content map page '+curPage+' from sourceId '+sourceId);
+		CCObject.log(contentMap);
+		return Content.factory(contentMap, options);
 	});
 }

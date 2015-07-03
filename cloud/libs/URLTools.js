@@ -1,4 +1,4 @@
-
+  
 var CCHttp = require('cloud/libs/CCHttp');
 
 //
@@ -13,9 +13,7 @@ exports.bitly = function(url, response) {
     maxAge: -1, // never expire, always goood.
 		cacheValidation: function(obj) {
 			return obj && obj.data ? true : false;
-		},
-    success: response.success,
-    error: response.error,
+		}
   });
 }
 

@@ -13,8 +13,6 @@ exports.headlineScore = function(headline, options) {
     key: headline,
     cacheName: 'Headline',
     maxAge: -1, // Cache forever, headlines do not change in score
-    success: options.success,
-    error: options.error,
   });
 }
 
@@ -27,8 +25,6 @@ exports.fbGraph = function(url, response) {
     url: ogQuery,
     key: url,
     cacheName: 'FacebookGraph',
-    success: response.success,
-    error: response.error,
   });
 }
 
@@ -51,29 +47,25 @@ exports.metaTags = function(url, response) {
     html: true,
     cacheName: 'MetaTags',
     maxAge: -1, // never expire, always goood.
-    success: function(result) {
-      var tags = result.text.match(new RegExp("<meta\\s*(?:(?:\\b(\\w|-)+\\b\\s*(?:=\\s*(?:[\"\"[^\"\"]*\"\"|'[^']*'|[^\"\"'<> ]|[''[^'']*''|\"[^\"]*\"|[^''\"<> ]]]+)\\s*)?)*)/?\\s*>",'gi')),
-          res = [];
-      for(var t in tags) {
-        var map = {};
-        var m = tags[t].match(/((\S+)=["']?((?:.(?!["']?\s+(?:\S+)=|[>"']))+.)["']?)+/gi);
-        if (!m) continue;
-        for (var i=0; i<m.length; i++) {
-          var kv = getKV(m[i]);
-          if (kv) {
-            map[kv.k] = kv.v;
-          }
+  }).then(function(result) {
+    var tags = result.text.match(new RegExp("<meta\\s*(?:(?:\\b(\\w|-)+\\b\\s*(?:=\\s*(?:[\"\"[^\"\"]*\"\"|'[^']*'|[^\"\"'<> ]|[''[^'']*''|\"[^\"]*\"|[^''\"<> ]]]+)\\s*)?)*)/?\\s*>",'gi')),
+        res = [];
+    for(var t in tags) {
+      var map = {};
+      var m = tags[t].match(/((\S+)=["']?((?:.(?!["']?\s+(?:\S+)=|[>"']))+.)["']?)+/gi);
+      if (!m) continue;
+      for (var i=0; i<m.length; i++) {
+        var kv = getKV(m[i]);
+        if (kv) {
+          map[kv.k] = kv.v;
         }
-        res.push(map);
       }
-      response.success({
-        tags : res,
-        headers : result.headers,
-      });
-    },
-    error: function(e) {
-      response.error(e);
-    },
+      res.push(map);
+    }
+    return {
+      tags : res,
+      headers : result.headers,
+    };
   });
 }
 
@@ -93,7 +85,5 @@ exports.prismaticAnnotations = function(url, response) {
     header:{
       'Content-Type': 'application/json',
     },
-    success: response.success,
-    error: response.error,
   });
 }

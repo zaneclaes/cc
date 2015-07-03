@@ -5,7 +5,6 @@ var isLocal = typeof __dirname !== 'undefined',
     Content = require('cloud/Content').Content,
     Delta = require('cloud/Delta').Delta,
     Source = require('cloud/Source'),
-    OpQueue = require('cloud/libs/CCOpQueue').OpQueue,
     Stream = require('cloud/Stream').Stream,
     StreamItem = require('cloud/StreamItem').StreamItem,
     Router = require('cloud/Router');
@@ -23,7 +22,7 @@ Router.listen();
 function onApiError(req, res) {
   return function(error) {
     CCObject.log('[ERROR][API]',10);
-    CCObject.log(error);
+    CCObject.log(error,10);
     res.error({'error' : error});
   };
 }
@@ -31,15 +30,13 @@ function onApiError(req, res) {
 // Get a stream by a given stream ID
 Parse.Cloud.define("stream", function(request, response) {
 	Stream.stream(request.params).then(function(out) {
-    CCObject.log('out',10);
-    CCObject.log(out,10);
     response.success(out.json.items);
   }, onApiError(request, response));
 });
 
 // Tag a URL?
 Parse.Cloud.define("tag", function(request, response) {
-	Analyzer.metaTags(request.params.url, response);
+	Analyzer.metaTags(request.params.url).then(response.success, onApiError(request, response));
 });
 
 // Get a content by a given objectId or name
@@ -52,7 +49,7 @@ Parse.Cloud.define("item", function(request, response) {
 	else if (request.params.shortcode && request.params.shortcode.length) {
 		query.equalTo('shortcode', request.params.shortcode);
 	}
-	query.first(response);
+	query.first().then(response.success, onApiError(request, response));
 });
 
 /*************************************************************************************
@@ -63,36 +60,39 @@ Parse.Cloud.job("ingest", function(request, status) {
 	var startTime = new Date().getTime();
 	status.message('ingesting...');
 	Parse.Cloud.useMasterKey();
-  Source.ingest({
-    success: function(res) {
-    	status.success('ingested in '+(((new Date).getTime() - startTime)/1000) + 'sec');
-    },
-    error: function(e) {
-      status.error("Error: " + e.toString() );
-    }
-  });
+  Source.ingest().then(function(res) {
+  	status.success('ingested in '+(((new Date).getTime() - startTime)/1000) + 'sec');
+  }, onApiError(request, status));
 });
 
 Parse.Cloud.job("analyze", function(request, status) {
 	var startTime = new Date().getTime();
 	status.message('analyzing...');
 	Parse.Cloud.useMasterKey();
-  Content.analyze({
-    success: function(res) {
-    	status.success('ingested in '+(((new Date).getTime() - startTime)/1000) + 'sec');
-    },
-    error: function(e) {
-      status.error("Error: " + e.toString() );
-    }
-  });
+  Content.analyze().then(function(res) {
+  	status.success('ingested in '+(((new Date).getTime() - startTime)/1000) + 'sec');
+  }, onApiError(request, status));
 });
 
+function onBeforeSaveSuccess(res) {
+  // Throw out obj, beforeSave can't handle it.
+  return function(obj) {
+    res.success();
+  }
+}
+
 Parse.Cloud.beforeSave("Content", function(request, response) {
-	request.object.analyze(response);
+	request.object.analyze().then(
+    onBeforeSaveSuccess(response), 
+    onApiError(request, response)
+  );
 });
 
 Parse.Cloud.beforeSave("StreamItem", function(request, response) {
-	request.object.fork(response);
+	request.object.fork().then(
+    onBeforeSaveSuccess(response), 
+    onApiError(request, response)
+  );
 });
 
 Parse.Cloud.beforeSave("Delta", function(request, response) {
@@ -103,5 +103,8 @@ Parse.Cloud.beforeSave("Delta", function(request, response) {
 });
 
 Parse.Cloud.beforeSave(Stream, function(request, response) {
-	request.object.populate(response);
+	request.object.populate().then(
+    onBeforeSaveSuccess(response), 
+    onApiError(request, response)
+  );
 });

@@ -1,7 +1,6 @@
 var CCObject = require('cloud/libs/CCObject'),
     Content = require('cloud/Content').Content,
     Delta = require('cloud/Delta').Delta,
-    OpQueue = require('cloud/libs/CCOpQueue').OpQueue,
     StreamItem = require('cloud/StreamItem').StreamItem;
 
 /**
@@ -62,11 +61,9 @@ var Stream = Parse.Object.extend("Stream", {
    * Happens as a beforeSave
    */
   populate: function(options) {
+    options = options || {};
     var self = this,
-        cb = options.success,
-        finalCallback = function(createdItems){
-          cb();
-        },
+        allItems = [],
         expectedPopulationIndex = parseInt(this.get('populationIndex') || 0);
 
     // Rate limit population
@@ -78,39 +75,30 @@ var Stream = Parse.Object.extend("Stream", {
     query.equalTo('streamId',this.id);
     query.limit(1);
     query.descending('createdAt');
-    query.first({
-      success: function(item) {
-        if (item && item.createdAt) {
-          options.startDate = item.createdAt;
+    return query.first().then(function(item) {
+      allItems.push(item);
+      if (item && item.createdAt) {
+        options.startDate = item.createdAt;
+      }
+      // Before we do the fetchDeltas, let's make sure that we're not in a race
+      // condition on the populationIndex
+      query = new Parse.Query(Stream);
+      query.equalTo('objectId',self.id);
+      return query.first();
+    }).then(function(stream) {
+      if (!stream || parseInt(stream.get('populationIndex') || 0) !== expectedPopulationIndex) {
+        if (stream) {
+          CCObject.log('[Stream '+self.id+'] skipping population because index was '+stream.get('populationIndex')+
+                       ' instead of '+expectedPopulationIndex+'',3);
+          CCObject.log(stream, 3);
         }
-        options.success = function(built) {
-          var allItems = [item];
-          for (var relationship in built) {
-            allItems.push(built[relationship]);
-          }
-          finalCallback(allItems);
-        };
-
-        // Before we do the fetchDeltas, let's make sure that we're not in a race
-        // condition on the populationIndex
-        query = new Parse.Query(Stream);
-        query.equalTo('objectId',self.id);
-        query.first({
-          success: function(stream) {
-            if (!stream || parseInt(stream.get('populationIndex') || 0) !== expectedPopulationIndex) {
-              CCObject.log('[Stream '+self.id+'] skipping population because index was '+stream.get('populationIndex')+
-                           ' instead of '+expectedPopulationIndex+'',3);
-              CCObject.log(stream, 3);
-              finalCallback([]);
-            }
-            else {
-              self.fetchDeltas(options);
-            }
-          },
-          error: options.error,
-        });
-      },
-      error: options.error,
+        return [];
+      }
+      else {
+        return self.fetchDeltas(options);
+      }
+    }).then(function(built) {
+      return CCObject.arrayUnion(allItems, built);
     });
   },
   /**
@@ -122,21 +110,12 @@ var Stream = Parse.Object.extend("Stream", {
         query = new Parse.Query(Delta);
     query.equalTo('streamId',this.id);
     query.lessThanOrEqualTo('nextFetch', new Date());
-    query.find({
-      success: function(deltas) {
-        var ops = new OpQueue();
-        ops.displayName = 'fetchDeltas';
-        for (var d in deltas) {
-          ops.queueOp({
-            delta: deltas[d],
-            run: function(op, options) {
-              op.delta.fetch(self, options);
-            }
-          });
-        }//for
-        ops.run(options.success);
-      },// success
-      error: options.error
+    query.find().then(function(deltas) {
+      var chain = Parse.Promise.as(true);
+      for (var d in deltas) {
+        chain.then(deltas[d].fetch(self, options));
+      }
+      return chain;
     });
   },
   /**

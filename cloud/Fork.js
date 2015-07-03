@@ -1,5 +1,4 @@
 var CCObject = require('cloud/libs/CCObject'),
-		OpQueue = require('cloud/libs/CCOpQueue').OpQueue,
     URLTools = require('cloud/libs/URLTools');
 
 var Fork = Parse.Object.extend("Fork", {
@@ -16,10 +15,10 @@ var Fork = Parse.Object.extend("Fork", {
 
     CCObject.log('[Fork] forking '+type+'::'+name);
     if (name === Fork.BITLY) {
-      URLTools.bitly(streamItem.get('url'), options);
+      return URLTools.bitly(streamItem.get('url'), options);
     }
     else {
-      options.success(true);
+      return true;
     }
 	},
 	/**
@@ -78,40 +77,33 @@ var Fork = Parse.Object.extend("Fork", {
 
 	/**
 	 * The Delta has passed an array of forks to the streamItem
-	 * Operate on each of them.
+	 * Operate on each of them. We use a serial chain of promises.
 	 */
 	forkStreamItem: function(streamItem, forks, options) {
-    var forkQueue = new OpQueue(),
-    		forkOpMap = {},
-        forkResults = streamItem.get('forkResults') || {};
-    forkQueue.displayName = 'Forks';
-    forkQueue.maxConcurrentOps = 1; // Forks need to be run serially to preserve possible intentional cross-effects.
-
-    // Enqueue each of the forks...
-    for (var f in forks) {
-      forkOpMap[f] = forkQueue.queueOp({
-      	fork: forks[f],
-        run: function(op, options) {
-        	op.fork.fork(streamItem, {
-            success: function(response) {
-              forkResults[op.fork.id] = {
-                'input' : response,
-                'output': op.fork.merge(response, streamItem),
-              };
-              options.success(response);
-            },
-            error: options.error,
-          });
-        }
-      });
+    if (forks.length <= 0) {
+      return {};
     }
-    CCObject.log('[Fork] '+forks.length+' for streamItem');
-
-    // Run the queue...
-    forkQueue.run(function(q){
+    var chain = null,
+        forkResults = streamItem.get('forkResults') || {};
+    for (var f in forks) {
+      var p = forks[f].fork(streamItem).then(function(response) {
+        forkResults[op.fork.id] = {
+          'input' : response,
+          'output': op.fork.merge(response, streamItem),
+        };
+        return true;
+      });
+      if (chain) {
+        chain.then(p);
+      }
+      else {
+        chain = p;
+      }
+    }
+    return chain.then(function(q) {
       streamItem.set('pendingForkIds',[]);
       streamItem.set('forkResults',forkResults);
-      if(options && options.success) options.success();
+      return true;
     });
 	},
 });

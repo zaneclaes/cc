@@ -1,7 +1,6 @@
 var CCObject = require('cloud/libs/CCObject'),
     Content = require('cloud/Content').Content,
     Source = require('cloud/Source'),
-    OpQueue = require('cloud/libs/CCOpQueue').OpQueue,
     StreamItem = require('cloud/StreamItem').StreamItem;
 
 /**
@@ -27,54 +26,39 @@ var Delta = Parse.Object.extend("Delta", {
         sourceIds = self.get('sourceIds');
     if (!sourceIds || sourceIds.length <= 0) {
       // With no sources attached, just query from all contentSources.
-      self.fetchContent([], stream, options);
-      return;
+      return self.fetchContent([], stream, options);
     }
     this.stream = stream;
     query.containedIn('objectId',sourceIds);
-    query.find({
-      success: function(sources) {
-        // Content sources (rss, prismatic, etc.) are bundled up and sent to fetchContent
-        // Static sources (recycling, etc.) are bundled up and sent to fetchStatic
-        var contentSources = [],
-            staticSources = [];
-        for (var s in sources) {
-          var source = sources[s];
-          if(Source.CONTENT_SOURCE_TYPES.indexOf(source.get('type')) >= 0) {
-            contentSources.push(source);
-          }
-          else {
-            staticSources.push(source);
-          }
+    return query.find().then(function(sources) {
+      // Content sources (rss, prismatic, etc.) are bundled up and sent to fetchContent
+      // Static sources (recycling, etc.) are bundled up and sent to fetchStatic
+      var contentSources = [],
+          staticSources = [];
+      for (var s in sources) {
+        var source = sources[s];
+        if(Source.CONTENT_SOURCE_TYPES.indexOf(source.get('type')) >= 0) {
+          contentSources.push(source);
         }
-        var ops = new OpQueue();
-        ops.displayName = 'deltaDiffs';
-        ops.maxConcurrentOps = 1; // IMPORTANT: we want static sources to be analyzed second.
-        if (contentSources.length > 0 || (contentSources.length == 0 && staticSources.length == 0)) {
-          ops.queueOp({
-            sources: contentSources,
-            run: function(op, options) {
-              self.fetchContent(op.sources, stream, options);
-            }
-          });
+        else {
+          staticSources.push(source);
         }
-        if (staticSources.length > 0) {
-          ops.queueOp({
-            sources: staticSources,
-            run: function(op, options) {
-              self.fetchStatic(op.sources, stream, options);
-            }
-          });
-        }
-        ops.run(function(ops){
-          var res = [];
-          for(var r in ops.results) {
-            res = CCObject.arrayUnion(res, ops.results[r] || []);
-          }
-          self.gateStreamItems(stream, res, options);
-        });
-      },
-      error: options.error,
+      }
+      var chain = Parse.Promise.as(true),
+          allItems = [],
+          handler = function(items) {
+            allItems = CCObject.arrayUnion(allItems, items || []);
+          };
+
+      if (contentSources.length > 0 || (contentSources.length == 0 && staticSources.length == 0)) {
+        chain.then(self.fetchContent(contentSources, stream, options).then(handler));
+      }
+      if (staticSources.length > 0) {
+        chain.then(self.fetchStatic(staticSources, stream, options).then(handler));
+      }
+      return chain.then(function() {
+        return self.gateStreamItems(stream, allItems);
+      });
     });
   },
   /**
@@ -83,11 +67,9 @@ var Delta = Parse.Object.extend("Delta", {
    * should be allowed into the stream. We *SAVE* all of it,
    * but first we choose statuses based upon
    */
-  gateStreamItems: function(stream, items, options) {
-
+  gateStreamItems: function(stream, items) {
     if (items.length <= 0) {
-      options.success(items);
-      return;
+      return items;
     }
 
     // Score the items based upon delta modifications
@@ -115,16 +97,8 @@ var Delta = Parse.Object.extend("Delta", {
       items[i].set('status', StreamItem.STATUS_GATED);
     }
 
-    Parse.Object.saveAll(items, {
-      success: function(saved) {
-        if (rate > 0) {
-          var nextFetchTime = (new Date()).getTime() + rate;
-          self.set('nextFetch', new Date(nextFetchTime));
-        }
-        options.success(items);
-      },
-      error: options.error,
-    });
+    self.set('nextFetch', new Date((new Date()).getTime() + rate));
+    return Parse.Object.saveAll(items);
   },
   /**
    * Fetches posts for the stream from the Content table
@@ -204,12 +178,9 @@ var Delta = Parse.Object.extend("Delta", {
     query.descending('score'); // createdAt??
     // Main search string filters
     CCObject.log('[Delta] search: '+log.join(' | '),2);
-    query.find({
-      success: function(contents) {
-        CCObject.log('[Delta] found content: '+contents.length,2);
-        StreamItem.factory(stream, self, contents, options);
-      },
-      error: options.error
+    query.find().then(function(contents) {
+      CCObject.log('[Delta] found content: '+contents.length,2);
+      return StreamItem.factory(stream, self, contents, options);
     });
   },
   /**
@@ -227,12 +198,9 @@ var Delta = Parse.Object.extend("Delta", {
     query.equalTo("static",true);
     query.descending("score");
     query.limit(limit);
-    query.find({
-      success: function(contents) {
-        CCObject.log('[Delta] found statics: '+contents.length,3);
-        StreamItem.factory(stream, self, contents, options);
-      },
-      error: options.error,
+    query.find().then(function(contents) {
+      CCObject.log('[Delta] found statics: '+contents.length,3);
+      return StreamItem.factory(stream, self, contents, options);
     });
   },
   /**

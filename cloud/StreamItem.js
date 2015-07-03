@@ -1,6 +1,5 @@
 var CCObject = require('cloud/libs/CCObject'),
     Content = require('cloud/Content').Content,
-    OpQueue = require('cloud/libs/CCOpQueue').OpQueue,
     Fork = require('cloud/Fork').Fork;
 
 var StreamItem = Parse.Object.extend("StreamItem", {
@@ -12,8 +11,8 @@ var StreamItem = Parse.Object.extend("StreamItem", {
    * (trim the pipe bandwidth)
    */
   present: function() {
-    return CCObject.scrubJSON(this, ['holdDate','operations','relationship','matches','status','delta','stream',
-                                     'publisher','pendingForkIds','forkResults','scheduledAt']);
+    return CCObject.scrubJSON(this, ['holdDate','operations','relationship','status','delta','stream',
+                                     'publisher','pendingForkIds','forkResults','contentScore']);
   },
 	/**
 	 * Before Save
@@ -23,39 +22,27 @@ var StreamItem = Parse.Object.extend("StreamItem", {
 		var self = this,
 				forkMap = {},
 				forkIds = self.get('pendingForkIds'),
-        status = self.get('status'),
-        success = options && options.success ? options.success : function(){};
-
-    options.success = function(res) {
-      // Any final sanitization? Do it here.
-      success();
-    }
+        status = self.get('status');
 
 		if(status !== StreamItem.STATUS_GATED || !forkIds || !forkIds.length) {
-      options.success();
-      return;
+      return Parse.Promise.as(true);
 		}
 
     // Load the forks...
     var query = new Parse.Query(Fork);
     query.containedIn('objectId',forkIds);
-    query.find({
-      success: function(forks) {
-        if(!forks || !forks.length) {
-          if(options && options.success) options.success();
-          return;
-        }
-        self.set('status', StreamItem.STATUS_FORKED); // Will only be committed if this all succceds.
+    return query.find().then(function(forks) {
+      if(!forks || !forks.length) {
+        return true;
+      }
+      self.set('status', StreamItem.STATUS_FORKED); // Will only be committed if this all succceds.
 
-        // Sort the forks based on our own forkIds, to preserve order.
-        var sortedForks = forks.sort(function(a, b){
-          return forkIds.indexOf(a.id) - forkIds.indexOf(b.id);
-        });
-        Fork.forkStreamItem(self, sortedForks, options);
-      },
-      error: options.error,
-    })
-
+      // Sort the forks based on our own forkIds, to preserve order.
+      var sortedForks = forks.sort(function(a, b){
+        return forkIds.indexOf(a.id) - forkIds.indexOf(b.id);
+      });
+      return Fork.forkStreamItem(self, sortedForks, options);
+    });
 	},
 
 }, {
@@ -84,37 +71,34 @@ var StreamItem = Parse.Object.extend("StreamItem", {
     query.equalTo('stream',stream);
     query.descending('createdAt');
     query.limit(1000);
-    query.find({
-      success: function(items) {
-        CCObject.log('[ItemFactory] found item matches: '+items.length,3);
-        var built = {},
-            toSave = [];
+    return query.find().then(function(items) {
+      CCObject.log('[ItemFactory] found item matches: '+items.length,3);
+      var built = {},
+          toSave = [];
 
-        for (var i in items) {
-          var item = items[i],
-              relationship = item.get('relationship');
-          if(relationship) {
-            relationships = CCObject.arrayRemove(relationships, relationship);
-            built[relationship] = item;
-          }
-          else {
-            built[relationship] = StreamItem._factory(stream, delta, map[relationship]);
-            if (built[relationship]) {
-            	toSave.push(built[relationship]);
-            }
-          }
+      for (var i in items) {
+        var item = items[i],
+            relationship = item.get('relationship');
+        if(relationship) {
+          relationships = CCObject.arrayRemove(relationships, relationship);
+          built[relationship] = item;
         }
-        for (var r in relationships) {
-          var relationship = relationships[r];
+        else {
           built[relationship] = StreamItem._factory(stream, delta, map[relationship]);
           if (built[relationship]) {
-	          toSave.push(built[relationship]);
-	        }
+          	toSave.push(built[relationship]);
+          }
         }
-        CCObject.log('[ItemFactory] builds to save: '+toSave.length, 3);
-        options.success(toSave);
-      },
-      error: options.error,
+      }
+      for (var r in relationships) {
+        var relationship = relationships[r];
+        built[relationship] = StreamItem._factory(stream, delta, map[relationship]);
+        if (built[relationship]) {
+          toSave.push(built[relationship]);
+        }
+      }
+      CCObject.log('[ItemFactory] builds to save: '+toSave.length, 3);
+      return toSave;
     });
   },
 

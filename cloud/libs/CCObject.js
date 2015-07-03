@@ -8,6 +8,26 @@ exports.log = function(str, priority) {
   }
 }
 
+exports.timeUntil = function(date) {
+  var now = new Date().getTime(),
+      sec = (date.getTime() - now) / 1000;
+  if (sec < 60) return 'seconds';
+  var min = (sec / 60) % 60,
+      minStr = Math.round(min) + ' min',
+      hrs = (sec / (60 * 60)) % 24,
+      hrsStr = hrs >= 1 ? (Math.round(hrs) + ' hrs') : false,
+      dys = (sec / (60 * 60 * 24)) % 7,
+      dysStr = dys >= 1 ? (Math.round(dys) + ' days') : false,
+      wks = (sec / (60 * 60 * 24 * 7)),
+      wksStr = wks >= 1 ? (Math.round(wks) + ' weeks') : false,
+      ret = [];
+  if (wksStr) ret.push(wksStr);
+  if (dysStr) ret.push(dysStr);
+  if (hrsStr) ret.push(hrsStr);
+  ret.push(minStr);
+  return ret.join(', ');
+}
+
 exports.scrubJSON = function(obj, keysToRemove) {
   var item = JSON.parse(JSON.stringify(obj));
   for (var s in keysToRemove) {
@@ -60,7 +80,7 @@ exports.arrayUnion = function() {
   var res = [];
   for (var i=0; i<arguments.length; i++) {
     var arg = arguments[i];
-    for (var j=0; j<arg.length; j++) {
+    for (var j in arg) {
       res.push(arg[j]);
     }
   }

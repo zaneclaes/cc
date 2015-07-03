@@ -1,6 +1,5 @@
 var CCHttp = require('cloud/libs/CCHttp'),
 		CCObject = require('cloud/libs/CCObject'),
-		CCOpQueue = require('cloud/libs/CCOpQueue').OpQueue,
 		Content = require('cloud/Content'),
 		Prismatic = require('cloud/SourcePrismatic'),
 		Rss = require('cloud/SourceRSS');
@@ -21,25 +20,26 @@ exports.ingestSource = function(source, options) {
 	type = source.get('type');
 	options.source = source;
 	if (type === 'prismatic') {
-		Prismatic.ingest(options);
+		return Prismatic.ingest(options);
 	}
 	else if (type === 'rss') {
-		Rss.ingest(options);
+		return Rss.ingest(options);
 	}
 	else if (type === 'static') {
 		// NOP : static sources generate during the Delta
-		options.success([]);
+		return [];
 	}
 	else {
-		return false;
+		return [];
 	}
-	return true;
+	return [];
 };
 
 //
 // Ingest all sources
 //
 exports.ingest = function(options) {
+	options = options || {};
 	var ingesting = 1,
 			results = {
 				ingested: 0,
@@ -67,27 +67,17 @@ exports.ingest = function(options) {
 	if (options.sourceNames && options.sourceNames.length) {
 		query.containedIn("type",options.sourceNames);
 	}
-	query.find({
-		success: function(sources) {
-			CCObject.log('sources query found '+sources.length);
-			var queue = new CCOpQueue();
-			queue.displayName = 'Ingestion';
-			queue.maxConcurrentOps = 5;
-			for (var i=0; i<sources.length; i++) {
-				queue.queueOp({
-					source: sources[i],
-					run: function(op, options) {
-						exports.ingestSource(op.source, options);
-					}
-				});
-			}
-			queue.run(function(queue) {
-				CCObject.log('[Ingestion] queue completed: '+queue.completed.length);
-				options.success(queue.results);
-			});
-		},
-		error: options.error,
-	})
+	return query.find().then(function(sources) {
+		CCObject.log('sources query found '+sources.length);
+		var promises = [];
+		for (var i=0; i<sources.length; i++) {
+			promises.push(exports.ingestSource(sources[i], options));
+		}
+		return Parse.Promise.when(promises).then(function() {
+			CCObject.log('[Ingestion] queue completed: '+promises.length);
+			return true;
+		});
+	});
 
 }
 

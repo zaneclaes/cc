@@ -5,7 +5,6 @@ var isLocal = typeof __dirname !== 'undefined',
     Content = require('cloud/Content').Content,
     Delta = require('cloud/Delta').Delta,
     Source = require('cloud/Source'),
-    OpQueue = require('cloud/libs/CCOpQueue').OpQueue,
     Stream = require('cloud/Stream').Stream,
     StreamItem = require('cloud/StreamItem').StreamItem,
     express = require('express'),
@@ -19,8 +18,8 @@ var app = null;
 
 function onWebError(req, res) {
   return function(error) {
-    CCObject.log('[ERROR][WEB]',10);
-    CCObject.log(error);
+    CCObject.log('[ERROR]['+req.url+']',10);
+    CCObject.log(error, 10);
     res.error({'error' : error});
   };
 }
@@ -262,9 +261,16 @@ function requireLogin(req, res, next) {
     query.containedIn('status',[StreamItem.STATUS_FORKED,StreamItem.STATUS_ACCEPTED]);
     return query.find();
   }).then(Stream.dedupe).then(function(items) {
+    var itms = JSON.parse(JSON.stringify(items));
+    for (var i in itms) {
+      var date = new Date(itms[i].scheduledAt.iso);
+      itms[i].scheduledAt = date.toString();
+      itms[i].untilScheduled = CCObject.timeUntil(date);
+      itms[i].matches = itms[i].matches.join(', ');
+    }
     req.pending = items;
     req.vars.pendingCount = items.length;
-    req.vars.pending = JSON.parse(JSON.stringify(items));
+    req.vars.pending = itms;
     next();
   }, onWebError(req, res));
 }
@@ -297,6 +303,17 @@ function registerWeb() {
     req.vars.title = "Streams";
     renderWebpage('streams', req, res);
   });
+  app.post('/streams', requireLogin, function(req, res) {
+    var stream = new Stream();
+    stream.set('presentedAt', new Date(new Date().getTime() - 60000 * 60 * 24 * 30));
+    stream.set('lastPopulation', new Date(new Date().getTime() - 60000 * 60 * 24 * 30));
+    stream.set('name', req.body.name);
+    stream.set('user', Parse.User.current());
+    stream.save().then(function(s){
+      res.redirect('/streams/'+s.id);
+    }, onWebError(req, res));
+  });
+  // Individual stream page
   app.get('/streams/'+objectIdRegex, requireLogin, function(req, res) {
     renderWebpage('stream', req, res);
   });
@@ -321,14 +338,9 @@ function registerWeb() {
     } else if (accepted || rejected) {
       var status = accepted ? StreamItem.STATUS_ACCEPTED : StreamItem.STATUS_REJECTED;
       req.stream_item.set('status',status);
-      req.stream_item.save({
-        success: function(obj) {
-          res.redirect('/scheduled');
-        },
-        error: function(e) {
-          res.error('could not save the obj');
-        } 
-      });
+      req.stream_item.save().then(function(obj) {
+        res.redirect('/scheduled');
+      }, onWebError(req, res));
     } else {
       // NOP
       res.redirect('/scheduled');

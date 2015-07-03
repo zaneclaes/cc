@@ -2,8 +2,30 @@
   .row-fluid
     .span12.top
       h1 Streams
-      ul
+      ul.fa-ul
         each stream in streams
           li
-            a(href="#{root}streams/#{stream.objectId}") #{stream.name}
+            i.fa-li.fa.fa-rss
+            h4
+              a(href="#{root}streams/#{stream.objectId}") #{stream.name}
+  .col-md-5.col-md-offset-4
+    .panel.panel-default.center
+      .panel-heading
+        h3.panel-title
+          strong New Stream
+      .panel-body
+        form(role='form',action='/streams',method='POST')
+          .form-group
+            label(for='name') Stream Name
+            input#name.form-control(type='text', placeholder='Stream Name',name='name')
+          .btn-group
+            button.btn.btn-large.btn-info.dropdown-toggle(data-toggle="dropdown",href="#")
+              span.fa.fa-rss.fa-fw
+              | Custom Content
+            ul.dropdown-menu
+              li
+                a(href="#rss") RSS
+              li
+                a(href="#custom") Custom Content
+          button.btn.btn-large.btn-success.pull-right(type='submit') Create Stream
 // ./container
