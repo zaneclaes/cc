@@ -44,28 +44,29 @@ exports.metaTags = function(url, response) {
   return CCHttp.httpCachedRequest({
     url: url,
     key: url,
-    html: true,
     cacheName: 'MetaTags',
     maxAge: -1, // never expire, always goood.
-  }).then(function(result) {
-    var tags = result.text.match(new RegExp("<meta\\s*(?:(?:\\b(\\w|-)+\\b\\s*(?:=\\s*(?:[\"\"[^\"\"]*\"\"|'[^']*'|[^\"\"'<> ]|[''[^'']*''|\"[^\"]*\"|[^''\"<> ]]]+)\\s*)?)*)/?\\s*>",'gi')),
-        res = [];
-    for(var t in tags) {
-      var map = {};
-      var m = tags[t].match(/((\S+)=["']?((?:.(?!["']?\s+(?:\S+)=|[>"']))+.)["']?)+/gi);
-      if (!m) continue;
-      for (var i=0; i<m.length; i++) {
-        var kv = getKV(m[i]);
-        if (kv) {
-          map[kv.k] = kv.v;
+    parser: function(httpRequest) { // It's not JSON, we custom parse the httpRequest
+      var text = (httpRequest ? httpRequest.text : false) || '',
+          tags = text.match(new RegExp("<meta\\s*(?:(?:\\b(\\w|-)+\\b\\s*(?:=\\s*(?:[\"\"[^\"\"]*\"\"|'[^']*'|[^\"\"'<> ]|[''[^'']*''|\"[^\"]*\"|[^''\"<> ]]]+)\\s*)?)*)/?\\s*>",'gi')),
+          res = [];
+      for(var t in tags) {
+        var map = {};
+        var m = tags[t].match(/((\S+)=["']?((?:.(?!["']?\s+(?:\S+)=|[>"']))+.)["']?)+/gi);
+        if (!m) continue;
+        for (var i=0; i<m.length; i++) {
+          var kv = getKV(m[i]);
+          if (kv) {
+            map[kv.k] = kv.v;
+          }
         }
+        res.push(map);
       }
-      res.push(map);
-    }
-    return {
-      tags : res,
-      headers : result.headers,
-    };
+      return {
+        tags : res,
+        headers : result.headers,
+      };
+    },
   });
 }
 

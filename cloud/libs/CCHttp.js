@@ -22,16 +22,18 @@ exports.httpCachedRequest = function(options) {
   		validateForCaching = options.cacheValidation || function(obj) {
         return options.html || obj ? true : false;
       },
-      performCaching = function(httpResponse, obj) {
+      parser = options.parser || function(httpResponse) {
+        return httpResponse && httpResponse.text && !options.html ? JSON.parse(httpResponse.text) : null;
+      },
+      performCaching = function(obj) {
         // Either create or update the content
         if (!row) {
           row = new ContentClass();
           row.set('key', key);
           row.set('url', options.url);
         }
-        if (httpResponse) {
+        if (obj) {
           row.set('obj', obj);
-          row.set('text', httpResponse.text);
           row.set('cookies', httpResponse.cookies);
           row.set('headers', httpResponse.headers);
           row.set('status', httpResponse.status);
@@ -57,13 +59,13 @@ exports.httpCachedRequest = function(options) {
     });
   }).then(function(httpResponse) {
     // Actually got the HTTP request.
-    var obj = httpResponse && httpResponse.text && !options.html ? JSON.parse(httpResponse.text) : null;
+    var obj = parser(httpResponse);
     if (!httpResponse) {
       // We had a cached response
       return true;
     }
     else if (validateForCaching(obj)) {
-      return performCaching(httpResponse, obj);
+      return performCaching(obj);
     }
     else {
       // Cache validation failed. Don't raise an error, we don't want to break promise chains.
@@ -82,7 +84,6 @@ exports.httpCachedRequest = function(options) {
   }).then(function() {
     return row ? {
       obj: row.get('obj') || {},
-      text: row.get('text') || '',
       cookies: row.get('cookies') || {},
       headers: normalizeKeys(row.get('headers') || {}),
       status: row.get('status') || 0,

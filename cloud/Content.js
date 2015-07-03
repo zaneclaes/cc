@@ -188,6 +188,7 @@ var Content = Parse.Object.extend("Content", {
     if (!this.has('metaTags')) {
       log += 'metaTags, ';
       promises.push(Analyzer.metaTags(self.get('url')).then(function(metaTags) {
+        metaTags = metaTags.obj || {};
         CCObject.log('got tags');
         CCObject.log(metaTags.tags);
         CCObject.log(metaTags.headers);
