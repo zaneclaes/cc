@@ -4,7 +4,7 @@ var isLocal = typeof __dirname !== 'undefined',
     CCObject = require('cloud/libs/CCObject'),
     Content = require('cloud/Content').Content,
     Delta = require('cloud/Delta').Delta,
-    Source = require('cloud/Source'),
+    Source = require('cloud/Source').Source,
     Stream = require('cloud/Stream').Stream,
     StreamItem = require('cloud/StreamItem').StreamItem,
     Router = require('cloud/Router');
@@ -29,8 +29,10 @@ function onApiError(req, res) {
 
 // Get a stream by a given stream ID
 Parse.Cloud.define("stream", function(request, response) {
-	Stream.stream(request.params).then(function(out) {
-    response.success(out.json.items);
+	Stream.find(request.params).then(function(s) {
+    return s.present();
+  }).then(function(json) {
+    response.success(json.items);
   }, onApiError(request, response));
 });
 
@@ -103,7 +105,7 @@ Parse.Cloud.beforeSave("Delta", function(request, response) {
 });
 
 Parse.Cloud.beforeSave(Stream, function(request, response) {
-	request.object.populate().then(
+	request.object.onBeforeSave().then(
     onBeforeSaveSuccess(response), 
     onApiError(request, response)
   );

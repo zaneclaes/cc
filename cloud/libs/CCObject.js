@@ -1,11 +1,36 @@
 
-exports.LOG_PRIORITY_MIN = 3;
+exports.LOG_PRIORITY_MIN = 2;
 
 exports.log = function(str, priority) {
   priority = priority || 1;
   if (priority >= exports.LOG_PRIORITY_MIN) {
     console.log(str);
   }
+}
+
+exports.idStr = function(len) {
+  len = parseInt(len || 10);
+  var text = "";
+  var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  for( var i=0; i < len; i++ )
+      text += possible.charAt(Math.floor(Math.random() * possible.length));
+  return text;
+}
+
+exports.makeTemplateHtml = function(html) {
+  return html.match(/<(script|object|applet|embbed|frameset|iframe|form|textarea|input|button)(\s+.*?)?\/?>/);
+}
+
+exports.escapeHtml = function(text) {
+  var map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+
+  return text.replace(/[&<>"']/g, function(m) { return map[m]; });
 }
 
 exports.timeUntil = function(date) {
@@ -50,6 +75,18 @@ exports.arrayRemove = function(arr) {
 exports.canonicalTag = function(t) {
   // strip everything but numbers letters and spaces
   return t.replace(/[^a-zA-Z\d\s]/g, '').trim();
+}
+
+exports.canonicalName = function(n) {
+  var ret = [],
+      parts = exports.canonicalTag(n).split(' ');
+  for (var p in parts) {
+    var pt = parts[p].trim();
+    if (pt.length) {
+      ret.push(pt);
+    }
+  }
+  return ret.join('-').toLowerCase().substring(0,32);
 }
 
 exports.canonicalArray = function(arr) {

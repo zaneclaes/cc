@@ -1,1 +1,13 @@
 h2 New Delta
+.col-md-5.col-md-offset-4
+  .panel.panel-default.center
+    .panel-heading
+      h3.panel-title
+        strong New Delta
+    .panel-body
+      form(role='form',action='/deltas',method='POST')
+        input(type='hidden',name='streamId',value='#{stream.objectId}')
+        .form-group
+          label(for='name') Delta Name
+          input#name.form-control(type='text', placeholder='Delta Name',name='name')
+        button.btn.btn-large.btn-success.pull-right(type='submit') Create Delta

@@ -1,1 +1,40 @@
 h1 #{delta.name}
+.col-md-5.col-md-offset-4
+  .panel.panel-default.center
+    .panel-heading
+      h3.panel-title
+        strong New Source
+    .panel-body
+      form#newdelta(role='form',action='/sources',method='POST')
+        input(type='hidden',name='deltaId',value='#{delta.objectId}')
+        input(type='hidden',name='streamId',value='#{stream.objectId}')
+        input#deltatype(type='hidden',name='type',value='')
+        .form-group
+          input#settings.form-control(type='text', placeholder='Delta Settings',name='settings')
+        .btn-group.pull-right
+          button.btn.btn-large.btn-info.dropdown-toggle(data-toggle="dropdown")
+            | Add a Source
+          ul.dropdown-menu.fa-ul
+            li
+              a(onclick="$('#deltatype').val('static'); $('#newdelta').submit();") 
+                span.fa.fa-link.fa-fw
+                | Static (Personal) Content
+            li
+              a(onclick="$('#deltatype').val('rss'); $('#newdelta').submit();") 
+                span.fa.fa-rss.fa-fw
+                | RSS Content
+            li
+              a(onclick="$('#deltatype').val('facebook'); $('#newdelta').submit();")
+                span.fa.fa-facebook.fa-fw
+                | Facebook Page
+            li
+              a(onclick="$('#deltatype').val('twitter'); $('#newdelta').submit();") 
+                span.fa.fa-twitter.fa-fw
+                | Twitter User
+            li
+              a(onclick="$('#deltatype').val('topic'); $('#newdelta').submit();") 
+                span.fa.fa-lightbulb-o.fa-fw
+                | Topic
+      // /.form
+    // ./panel-body
+  // ./panel

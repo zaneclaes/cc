@@ -64,7 +64,7 @@ exports.metaTags = function(url, response) {
       }
       return {
         tags : res,
-        headers : result.headers,
+        headers : httpRequest.headers,
       };
     },
   });

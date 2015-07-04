@@ -87,18 +87,13 @@ var Fork = Parse.Object.extend("Fork", {
         forkResults = streamItem.get('forkResults') || {};
     for (var f in forks) {
       var p = forks[f].fork(streamItem).then(function(response) {
-        forkResults[op.fork.id] = {
+        forkResults[forks[f].id] = {
           'input' : response,
-          'output': op.fork.merge(response, streamItem),
+          'output': forks[f].merge(response, streamItem),
         };
         return true;
       });
-      if (chain) {
-        chain.then(p);
-      }
-      else {
-        chain = p;
-      }
+      chain = chain ? chain.then(p) : p;
     }
     return chain.then(function(q) {
       streamItem.set('pendingForkIds',[]);

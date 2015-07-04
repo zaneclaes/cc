@@ -1,6 +1,6 @@
 var CCObject = require('cloud/libs/CCObject'),
     Content = require('cloud/Content').Content,
-    Source = require('cloud/Source'),
+    Source = require('cloud/Source').Source,
     StreamItem = require('cloud/StreamItem').StreamItem;
 
 /**
@@ -17,12 +17,10 @@ var Delta = Parse.Object.extend("Delta", {
 
   /**
    * Main operation to query the Source and create StreamItems
-   * If the Delta has undefined sourceIds, it will match all content source types
-   * (see: Source.CONTENT_SOURCE_TYPES)
    */
   fetch: function(stream, options) {
     var self = this,
-        query = new Parse.Query(Source.Source),
+        query = new Parse.Query(Source),
         sourceIds = self.get('sourceIds');
     if (!sourceIds || sourceIds.length <= 0) {
       // With no sources attached, just query from all contentSources.
@@ -37,26 +35,26 @@ var Delta = Parse.Object.extend("Delta", {
           staticSources = [];
       for (var s in sources) {
         var source = sources[s];
-        if(Source.CONTENT_SOURCE_TYPES.indexOf(source.get('type')) >= 0) {
-          contentSources.push(source);
-        }
-        else {
+        if(Source.TYPE_STATIC === source.get('type')) {
           staticSources.push(source);
         }
+        else {
+          contentSources.push(source);
+        }
       }
-      var chain = Parse.Promise.as(true),
+      var promises = [],
           allItems = [],
           handler = function(items) {
             allItems = CCObject.arrayUnion(allItems, items || []);
           };
 
       if (contentSources.length > 0 || (contentSources.length == 0 && staticSources.length == 0)) {
-        chain.then(self.fetchContent(contentSources, stream, options).then(handler));
+        promises.push(self.fetchContent(contentSources, stream, options).then(handler));
       }
       if (staticSources.length > 0) {
-        chain.then(self.fetchStatic(staticSources, stream, options).then(handler));
+        promises.push(self.fetchStatic(staticSources, stream, options).then(handler));
       }
-      return chain.then(function() {
+      return Parse.Promise.when(promises).then(function() {
         return self.gateStreamItems(stream, allItems);
       });
     });
@@ -96,7 +94,6 @@ var Delta = Parse.Object.extend("Delta", {
     for (var i=0; i<limit && i<items.length; i++) {
       items[i].set('status', StreamItem.STATUS_GATED);
     }
-
     self.set('nextFetch', new Date((new Date()).getTime() + rate));
     return Parse.Object.saveAll(items);
   },
@@ -178,7 +175,7 @@ var Delta = Parse.Object.extend("Delta", {
     query.descending('score'); // createdAt??
     // Main search string filters
     CCObject.log('[Delta] search: '+log.join(' | '),2);
-    query.find().then(function(contents) {
+    return query.find().then(function(contents) {
       CCObject.log('[Delta] found content: '+contents.length,2);
       return StreamItem.factory(stream, self, contents, options);
     });
@@ -198,7 +195,7 @@ var Delta = Parse.Object.extend("Delta", {
     query.equalTo("static",true);
     query.descending("score");
     query.limit(limit);
-    query.find().then(function(contents) {
+    return query.find().then(function(contents) {
       CCObject.log('[Delta] found statics: '+contents.length,3);
       return StreamItem.factory(stream, self, contents, options);
     });

@@ -10,8 +10,10 @@ var isLocal = typeof __dirname !== 'undefined',
     express = require('express'),
     parseExpressHttpsRedirect = require('parse-express-https-redirect'),
   	parseExpressCookieSession = require('parse-express-cookie-session'),
-    apiRegex = '/api/v[0-9]{1}/',
+    apiRegex = '^/api/v[0-9]{1}/',
+    queryParamRegex = '',//'(.*)',//'([\\?\\&]\\w*=\\w*)*',
     usernameRegex = '[a-zA-Z\.\-]{3,16}',
+    canonicalNameRegex = '[a-zA-Z0-9#\-]{1,37}' // 32 canonicalName.maxLength + # + 4 characters for uniqueness 
     objectIdRegex = '[a-zA-Z0-9]{8,12}'; // I think this is always 10, but left some fudge
 
 var app = null;
@@ -39,19 +41,44 @@ function registerAPI() {
 	app.use(apiMiddleware);
 
 	// GET /streams/:id
-	app.get(apiRegex + 'streams/' + objectIdRegex, function(request, response) {
-		var parts = request.url.split('/');
-		request.params.streamId = parts[4];
-		Stream.stream(request.params, {}).then(function(out) {
-			response.json(out.json);
-		}, onWebError(request, response));
+  var getStreamsId = apiRegex+'streams/'+canonicalNameRegex+'\.(rss|html|json)'+queryParamRegex+'$';
+	app.get(getStreamsId, function(req, res) {
+		var parts = req.url.split('/'),
+        end = parts[4].split('.'),
+        format = end[1].split('?')[0],
+        root = getJadeVariables(req)['root'],
+        json = {};
+		req.params.canonicalName = end[0];
+		Stream.find(req.params).then(function(s) {
+      var params = JSON.parse( JSON.stringify( req.query ) );
+      params.format = format;
+      params.url = req.url;
+      params.link = root + req.url;
+      console.log(params);
+      return s.present(params);
+    }).then(function(obj) {
+      if (format === 'json') {
+        res.json(obj);
+      }
+      else if (format === 'html') {
+        res.type('html');
+        res.end(obj);
+      }
+      else if(format === 'rss') {
+        //res.header('Content-Type:','application/rss+xml; charset=UTF-8');
+        res.end(obj);
+      }
+      else {
+        res.json({'error' : format})
+      }
+		}, onWebError(req, res));
 	});
-
+/*
 	// GET /sources/:id
 	app.get(apiRegex + 'sources/' + objectIdRegex, function(request, response) {
 		var parts = request.url.split('/'),
 				sourceId = parts[4],
-				query = new Parse.Query(Source.Source);
+				query = new Parse.Query(Source);
 		query.equalTo('objectId',sourceId);
 		query.first({
 			success: function(source) {
@@ -85,7 +112,7 @@ function registerAPI() {
 			},
 			error: response.error,
 		});
-	});
+	});*/
 }
 /***************************************************************************************
  * WEB HELPERS
@@ -93,7 +120,7 @@ function registerAPI() {
 function getJadeVariables(req) {
   // req: headers, url, signedCookies, method, ip, ips, subdomains, path, host, protocol
   return {
-    root: req ? req.protocol+'://'+req.host+'/' : 'https://www.deltas.io/',
+    root: req ? req.protocol+'://'+req.host : 'https://www.deltas.io',
     title: "Surface What's Good",
     user: null,
     pathToAssets: '',
@@ -105,6 +132,7 @@ function renderLoginError(error, res) {
   res.redirect('/login');
 }
 function renderWebpage(page, req, res) {
+  req.vars = req.vars || getJadeVariables(req);
   req.vars.page = page;
   var render = function() {
     if (req.streams) {
@@ -179,6 +207,24 @@ function restfulObjectLookup(querySetupFunc, postFindFunc) {
   }
 }
 
+function requireBodyParams(params) {
+  return function(req, res, next) {
+    var missing = [],
+        keys = Object.keys(req.body);
+    for (var p in params) {
+      if (keys.indexOf(params[p]) < 0) {
+        missing.push(params[p]);
+      }
+    }
+    if (missing.length > 0) {
+      throw new Error('Missing params: '+missing.join(', '));
+    }
+    else {
+      next();
+    }
+  }
+}
+
 function populateUser(req, res, next) {
   return Parse.User.current().fetch().then(function(user) {
     req.user = user;
@@ -209,20 +255,21 @@ function requireLogin(req, res, next) {
 
   var query = new Parse.Query(Stream),
       urlParts = req.url.split('/'),
-      streamId = urlParts.length >= 3 && urlParts[1] === 'streams' ? urlParts[2] : null;
+      streamId = urlParts.length >= 3 && urlParts[1] === 'streams' ? urlParts[2] : null,
+      streamIds = [];
 
   // Start by loading all the user's streams
   query.equalTo('user',Parse.User.current());
   query.find().then(function(streams) {
     req.streams = streams;
     var stream = null,
-        streamIds = [];
-    
+        promises = [];    
     for (var s in streams) {
       if (streamId && streams[s].id === streamId) {
         stream = streams[s];
       }
       streamIds.push(streams[s].id);
+      promises.push(streams[s].populate());
     }
     if (streamId) {
       // If we're at a /streams/:id endpoint, either assign the stream or error if it's not found
@@ -236,6 +283,8 @@ function requireLogin(req, res, next) {
         return null;
       }
     }
+    return Parse.Promise.when(promises);
+  }).then(function() {
     // Find all deltas
     var query = new Parse.Query(Delta);
     query.containedIn('streamId',streamIds);
@@ -250,7 +299,10 @@ function requireLogin(req, res, next) {
       }
       req.vars.streamDeltas = JSON.parse(JSON.stringify( req.streamDeltas ));
     }
-
+    req.deltaMap = {};
+    for (var d in deltas) {
+      req.deltaMap[deltas[d].id] = deltas[d];
+    }
     req.deltas = deltas;
     req.vars.deltas = JSON.parse(JSON.stringify(deltas));  
 
@@ -323,6 +375,29 @@ function registerWeb() {
   app.get('/scheduled', requireLogin, function(req, res) {
     renderWebpage('scheduled', req, res);
   });
+  // Sources
+  app.post('/sources', requireLogin, requireBodyParams(['deltaId','streamId','type','settings']), function(req, res) {
+    var delta = req.deltaMap[req.body.deltaId],
+        source = null;
+    if (!delta) {
+      renderWebpage('404', req, res);
+    } else {
+      var types = req.body.type.split('-');
+      Source.factory({
+        name : req.body.settings,
+        settings : { query : req.body.settings },
+        type : types[0],
+        subtype : types.length > 1 ? types[1] : null,
+      }).then(function(s) {
+        source = s;
+        delta.add('sourceIds', s.id);
+        return delta.save();
+      }).then(function(d) {
+        res.redirect('/streams/'+req.body.streamId+'#source-'+source.id);
+      });
+    }
+
+  });
 
   // Modify a stream item
   app.post('/stream_items/'+objectIdRegex, requireLogin, restfulObjectLookup(function(query) {
@@ -358,7 +433,6 @@ function registerWeb() {
     req.vars = getJadeVariables(req);
     page = req.url.split('/')[1];
     page = page && page.length > 0 ? page : 'index';
-    console.log('generic render '+page);
     if (!titleMap[page]) {
       page = '404';
     }
@@ -369,6 +443,9 @@ function registerWeb() {
     app.get('/'+allowedPages[k], genericRenderer);
   }
   app.get('/',genericRenderer);
+  app.use(function(req, res) {
+    renderWebpage('404', req, res);
+  });
 }
 
 /***************************************************************************************
@@ -376,6 +453,8 @@ function registerWeb() {
  ***************************************************************************************/
 exports.listen = function() {
 	app = express();
+  registerAPI();
+
   app.engine('jade', require('jade').__express);
   app.engine('ejs', require('ejs').__express);
   app.set('views', 'cloud/views');
@@ -385,7 +464,6 @@ exports.listen = function() {
   app.use(express.cookieParser('298oeuhd91hrajoe89g1234h9k09812'));
   app.use(parseExpressCookieSession({ cookie: { maxAge: 14400000 } }));
 
-	registerAPI();
 	registerWeb();
 	app.listen();
 };

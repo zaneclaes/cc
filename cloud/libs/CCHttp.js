@@ -2,7 +2,7 @@ var CCObject = require('cloud/libs/CCObject');
 
 exports.defaultMaxAge = 1000 * 60 * 15; // 15 Minutes...
 
-function normalizeKeys(obj) {
+exports.normalizeKeys = function(obj) {
 	var ret = {};
 	for (var k in obj) {
 		ret[k.toLowerCase()] = obj[k];
@@ -25,7 +25,7 @@ exports.httpCachedRequest = function(options) {
       parser = options.parser || function(httpResponse) {
         return httpResponse && httpResponse.text && !options.html ? JSON.parse(httpResponse.text) : null;
       },
-      performCaching = function(obj) {
+      performCaching = function(httpResponse, obj) {
         // Either create or update the content
         if (!row) {
           row = new ContentClass();
@@ -34,6 +34,13 @@ exports.httpCachedRequest = function(options) {
         }
         if (obj) {
           row.set('obj', obj);
+        }
+        if (typeof httpResponse === 'string') {
+          row.set('error', httpResponse);
+          row.increment('errorCount');
+        }
+        else if (httpResponse) {
+          row.set('errorCount', 0);
           row.set('cookies', httpResponse.cookies);
           row.set('headers', httpResponse.headers);
           row.set('status', httpResponse.status);
@@ -46,9 +53,11 @@ exports.httpCachedRequest = function(options) {
   return query.first().then(function(r) {
     row = r;// Upscope it, intentionally.
     var updatedAt = row ? row.updatedAt.getTime() : 0,
-        age = new Date().getTime() - updatedAt;
-    if (row && validateForCaching(row.get('obj')) && (maxAge < 0 || age < maxAge)) {
-      //console.log('cache hit: '+ key);
+        age = new Date().getTime() - updatedAt,
+        err = parseInt(row ? row.get('errorCount') : 0),
+        fresh = (maxAge < 0 || age < maxAge),
+        validated = row && validateForCaching(row.get('obj'));
+    if (err >= 3 || (validated && fresh)) {
       return false;
     }
     return Parse.Cloud.httpRequest({
@@ -61,31 +70,29 @@ exports.httpCachedRequest = function(options) {
     // Actually got the HTTP request.
     var obj = parser(httpResponse);
     if (!httpResponse) {
-      // We had a cached response
+      // We had a cached response; no need to perform caching
       return true;
     }
     else if (validateForCaching(obj)) {
-      return performCaching(obj);
+      // Cache validation succeded. Put it in.
+      return performCaching(httpResponse, obj);
     }
     else {
       // Cache validation failed. Don't raise an error, we don't want to break promise chains.
-      //CCObject.log('[HTTP] cache validation failed ' + (httpResponse.text ? httpResponse.text.length : -1),5);
-      /*throw new Error('cache validation failed for '+options.url+':'+
-                      (httpResponse.text ? httpResponse.text.length : -1)+':'+
-                      (obj ? 'd' : ''));*/
-      return performCaching(false);
+      return performCaching('validation failed');
     }
   }).then(function() {
     return true;
   }, function(e) {
     // Swallow the error, so we don't break the whole endpoint.
-    //console.log('recovering from http error');
-    return performCaching();
+    CCObject.log('[HTTP] recovering from http error: '+options.url,10);
+    CCObject.log(e,10);
+    return performCaching(JSON.stringify(e));
   }).then(function() {
     return row ? {
       obj: row.get('obj') || {},
       cookies: row.get('cookies') || {},
-      headers: normalizeKeys(row.get('headers') || {}),
+      headers: exports.normalizeKeys(row.get('headers') || {}),
       status: row.get('status') || 0,
     } : false;
   });
