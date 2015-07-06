@@ -286,7 +286,7 @@ var Source = Parse.Object.extend("Source", {
 	        'tags' : lastEntry['categories'],
 	        'images' : normalizeImages(lastEntry['mediaGroups']),
 	        'timestamp' : new Date(lastEntry['publishedDate']).getTime(),
-	        'payload' : lastEntry,
+	        //'payload' : lastEntry,
 	      };
 	    }
 	    return Content.factory(contentMap, options);

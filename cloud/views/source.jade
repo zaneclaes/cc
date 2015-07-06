@@ -1,0 +1,38 @@
+h2 
+  span.fa.fa-tint.fa-fw
+  | Source: #{source.name}
+ul.fa-ul
+  each item in streamitems
+    -if (item.source && item.source.objectId === source.objectId)
+      li
+        span.fa.fa-li.fa-link
+        a(href="#{item.originalUrl}",target="_blank") #{item.title}
+        code #{item.url}
+        p #{item.text}
+-if (source.type === 'static')
+  .container
+    .col-md-5.col-md-offset-4
+      .panel.panel-default.center
+        .panel-heading
+          h3.panel-title
+            strong Add Content
+        .panel-body
+          form(role='form',action='/contents',method='POST')
+            input(type="hidden",name="streamId",value="#{stream.objectId}")
+            input(type="hidden",name="sourceId",value="#{source.objectId}")
+            .form-group
+              input.form-control(type='text', placeholder='Title',name='title')
+            .form-group
+              textarea.form-control(placeholder='Text',name='text')
+            .form-group
+              input.form-control(type='text', placeholder='Link',name='link')
+            .form-group
+              input.form-control(type='text', placeholder='Image',name='image')
+            .form-group
+              input.form-control(type='text', placeholder='Tags',name='tags')
+            .form-group
+              textarea.form-control(placeholder='Custom Params (JSON)',name='params')
+            button.btn.btn-large.btn-success.pull-right(type='submit') Add Content
+  // ./container 
+-else
+  #{source.type}

@@ -8,7 +8,7 @@ var CCObject = require('cloud/libs/CCObject'),
  * Max age for content, if maxContentAge not specified by the stream
  */
 var DEFAULT_MAX_CONTENT_AGE = 1000 * 60 * 60 * 24 * 7;
-var DEFAULT_POPULATION_THROTTLE = 60000;
+var DEFAULT_POPULATION_THROTTLE = 0;// 60000;
 
 var Stream = Parse.Object.extend("Stream", {
   // @Instance

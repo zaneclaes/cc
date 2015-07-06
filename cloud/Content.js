@@ -84,6 +84,7 @@ var Content = Parse.Object.extend("Content", {
           'title' : 'title',
           'url' : 'url',
           'host' : 'host',
+          'source' : 'source',
         },
         matchRegex = delta.getSearchInclusionsRegexStr(),
         matches = (this.get('canonicalSearchString') || '').match(new RegExp(matchRegex, 'gi')),
@@ -93,6 +94,7 @@ var Content = Parse.Object.extend("Content", {
         item.set(keys[k], this.get(k));
       }
     }
+    matches = CCObject.arrayRemove(CCObject.arrayUnique(matches),'');
     if (this.has('redirectUrl')) {
       // Bypass the 301 all together... TODO: consider making this an optional Fork?
       item.set('url', this.get('redirectUrl'));
@@ -263,12 +265,12 @@ var Content = Parse.Object.extend("Content", {
   //
   // Takes a map of URLs => what we know about them
   //
-  factory: function(map, options) {
+  factory: function(map) {
     var urls = Object.keys(map),
         query = new Parse.Query(Content);
 
     query.containedIn("url", urls);
-    query.find().then(function(contents) {
+    return query.find().then(function(contents) {
       //CCObject.log('found content matches: '+contents.length);
       var built = {},
           toSave = [];
@@ -297,8 +299,9 @@ var Content = Parse.Object.extend("Content", {
       else {
         return built;
       }
+
       return Parse.Object.saveAll(toSave).then(function(saved) {
-        return built
+        return built;
       });
     });
   },

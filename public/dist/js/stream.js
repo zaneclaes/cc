@@ -1,6 +1,7 @@
 function loadHash(hash) {
   var h = hash.substr(1),
       streamId = $('#stream').attr('data-stream-id'),
+      streamCn = $('#stream').attr('data-stream-cn'),
       container = $('#'+h),
       icon = $('#stream-'+h+'-icon'),
       classes = (icon.attr('class') || '').split(' '),
@@ -19,14 +20,15 @@ function loadHash(hash) {
     container.empty();
     $('body').scrollTop();
     icon.removeClass(iconClass).addClass("fa-circle-o-notch fa-spin");
-    $.getJSON('/api/v1/streams/' + streamId, function( data ) {
-      container.append('<code>'+ JSON.stringify(data) + '</code>');
+    $.get('/api/v1/streams/' + streamCn + '.html', function( data ) {
+      container.html(data);
       restoreClass();
     });
-  } else if(hash.indexOf('#delta-') === 0) {
-    var deltaId = hash.substr('#delta-'.length);
+  } else if(hash.indexOf('#delta-') === 0 || hash.indexOf('#source-') === 0 || hash.indexOf('#fork-') === 0) {
+    var objId = hash.split('-')[1],
+        objType = hash.split('-')[0].substring(1);
     $('#stream').children().removeClass('active');
-    $('#delta').addClass('active').children().css({'display':'none'});
+    $('#'+objType).addClass('active').children().css({'display':'none'});
     $(hash).css({'display':''});
   } else if(hash === '#integration') {
     // NOP
@@ -63,7 +65,7 @@ $.fn.OneClickSelect = function () {
 
 $(function(){
   $('.dropdown-toggle').dropdown();
-  var hash = (window.location.hash || '#preview'),
+  var hash = (window.location.hash || '#integration'),
       show = ['#preview','#integration','#'];
   $('#stream-tabs a[href="' + (show.indexOf(hash)>=0 ? hash : '#') + '"]').tab('show');
   loadHash(hash);

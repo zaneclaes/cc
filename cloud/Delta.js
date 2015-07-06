@@ -66,6 +66,7 @@ var Delta = Parse.Object.extend("Delta", {
    * but first we choose statuses based upon
    */
   gateStreamItems: function(stream, items) {
+    CCObject.log('[Delta] gating '+items.length,3);
     if (items.length <= 0) {
       return items;
     }
@@ -192,11 +193,13 @@ var Delta = Parse.Object.extend("Delta", {
         query = new Parse.Query(Content),
         limit = 1;
     query.containedIn("source",sources);
-    query.equalTo("static",true);
+    //query.equalTo("static",true);
     query.descending("score");
     query.limit(limit);
     return query.find().then(function(contents) {
       CCObject.log('[Delta] found statics: '+contents.length,3);
+      options = JSON.parse( JSON.stringify( options ) );
+      options.isStatic = true;
       return StreamItem.factory(stream, self, contents, options);
     });
   },

@@ -4,7 +4,8 @@ var isLocal = typeof __dirname !== 'undefined',
     CCObject = require('cloud/libs/CCObject'),
     Content = require('cloud/Content').Content,
     Delta = require('cloud/Delta').Delta,
-    Source = require('cloud/Source'),
+    Fork = require('cloud/Fork').Fork,
+    Source = require('cloud/Source').Source,
     Stream = require('cloud/Stream').Stream,
     StreamItem = require('cloud/StreamItem').StreamItem,
     express = require('express'),
@@ -54,7 +55,6 @@ function registerAPI() {
       params.format = format;
       params.url = req.url;
       params.link = root + req.url;
-      console.log(params);
       return s.present(params);
     }).then(function(obj) {
       if (format === 'json') {
@@ -242,6 +242,17 @@ function populateUser(req, res, next) {
     next();
   }, onWebError(req, res));
 }
+function mapObjectsOnRequest(req, key, objects) {
+  objects = objects || [];
+  req[key] = objects;
+  req.vars[key] = JSON.parse(JSON.stringify(objects));
+  var mapKey = key + 'Map';
+  req[mapKey] = {};
+  for (var x in objects) {
+    var obj = objects[x];
+    req[mapKey][obj.id] = obj; 
+  }
+}
 /**
  * Errors if the user is not logged in
  * Also assigns streams, pending, deltas, stream, streamDeltas
@@ -256,20 +267,24 @@ function requireLogin(req, res, next) {
   var query = new Parse.Query(Stream),
       urlParts = req.url.split('/'),
       streamId = urlParts.length >= 3 && urlParts[1] === 'streams' ? urlParts[2] : null,
-      streamIds = [];
+      streamIds = [],
+      sourceIds = [],
+      forkIds = [];
 
   // Start by loading all the user's streams
   query.equalTo('user',Parse.User.current());
   query.find().then(function(streams) {
     req.streams = streams;
     var stream = null,
-        promises = [];    
+        promises = [];
+    req.streamMap = {};
     for (var s in streams) {
       if (streamId && streams[s].id === streamId) {
         stream = streams[s];
       }
       streamIds.push(streams[s].id);
       promises.push(streams[s].populate());
+      req.streamMap[streams[s].id] = streams[s];
     }
     if (streamId) {
       // If we're at a /streams/:id endpoint, either assign the stream or error if it's not found
@@ -283,12 +298,12 @@ function requireLogin(req, res, next) {
         return null;
       }
     }
-    return Parse.Promise.when(promises);
-  }).then(function() {
-    // Find all deltas
     var query = new Parse.Query(Delta);
     query.containedIn('streamId',streamIds);
-    return query.find();
+    promises = CCObject.arrayUnion([query.find()], promises);
+
+    // Populate all the streams, and find all the deltas...
+    return Parse.Promise.when(promises);
   }).then(function(deltas) {
     if (streamId) {
       req.streamDeltas = []; // Deltas for active steram
@@ -302,23 +317,52 @@ function requireLogin(req, res, next) {
     req.deltaMap = {};
     for (var d in deltas) {
       req.deltaMap[deltas[d].id] = deltas[d];
+      sourceIds = CCObject.arrayUnion(sourceIds, deltas[d].get('sourceIds') || []);
+      forkIds = CCObject.arrayUnion(forkIds, deltas[d].get('forkIds') || []);
     }
+    sourceIds = CCObject.arrayUnique(sourceIds);
+    forkIds = CCObject.arrayUnique(forkIds);
     req.deltas = deltas;
-    req.vars.deltas = JSON.parse(JSON.stringify(deltas));  
+    req.vars.deltas = JSON.parse(JSON.stringify(deltas)); 
+
+    // Find related information
+    var qs = new Parse.Query(Source);
+    qs.containedIn('objectId',sourceIds);
+
+    var qf = new Parse.Query(Fork);
+    // n.b., returning all forks for now so that we can render them all as possible additions to a delta
+    //qf.containedIn('objectId',forkIds);
+
+    var qc = null;
+    if (req.stream) {
+      qc = new Parse.Query(StreamItem);
+      qc.containedIn('status',[StreamItem.STATUS_FORKED,StreamItem.STATUS_ACCEPTED,StreamItem.STATUS_GATED]);
+      qc.equalTo('stream', req.stream);
+      qc.descending('scheduledAt');
+    } 
 
     // Find all the pending stream items that are forked or accepted
-    var query = new Parse.Query(StreamItem);
-    query.containedIn('stream',req.streams);
-    query.greaterThan('scheduledAt', new Date());
-    query.containedIn('status',[StreamItem.STATUS_FORKED,StreamItem.STATUS_ACCEPTED]);
-    return query.find();
-  }).then(Stream.dedupe).then(function(items) {
+    var qi = new Parse.Query(StreamItem);
+    qi.containedIn('stream',req.streams);
+    qi.greaterThan('scheduledAt', new Date());
+    qi.containedIn('status',[StreamItem.STATUS_FORKED,StreamItem.STATUS_ACCEPTED]);
+
+    return Parse.Promise.when([
+      qs.find(),
+      qf.find(),
+      qc ? qc.find() : Parse.Promise.as([]),
+      qi.find().then(Stream.dedupe)
+    ]);
+  }).then(function(sources, forks, contents, items) {
+    mapObjectsOnRequest(req, 'sources', sources);
+    mapObjectsOnRequest(req, 'forks', forks);
+    mapObjectsOnRequest(req, 'streamitems', contents || []);
     var itms = JSON.parse(JSON.stringify(items));
     for (var i in itms) {
       var date = new Date(itms[i].scheduledAt.iso);
       itms[i].scheduledAt = date.toString();
       itms[i].untilScheduled = CCObject.timeUntil(date);
-      itms[i].matches = itms[i].matches.join(', ');
+      itms[i].matches = itms[i].matches ? itms[i].matches.join(', ') : '';
     }
     req.pending = items;
     req.vars.pendingCount = items.length;
@@ -332,15 +376,14 @@ function requireLogin(req, res, next) {
  ***************************************************************************************/
 
 function registerWeb() {
+  app.use(parseExpressHttpsRedirect());  // Require user to be on HTTPS.
+
 	// Login
   app.post('/login', function(req, res) {
-  	Parse.User.logIn(req.body.username, req.body.password, {
-  		success: function(user) {
-	  		res.redirect('/streams');
-  		},
-  		error: function(user, error) {
-  			res.redirect('/login');
-  		}
+  	Parse.User.logIn(req.body.username, req.body.password).then(function() {
+      res.redirect('/streams');
+    }, function() {
+  		res.redirect('/login');
   	});
   });
 
@@ -375,30 +418,69 @@ function registerWeb() {
   app.get('/scheduled', requireLogin, function(req, res) {
     renderWebpage('scheduled', req, res);
   });
+  // Deltas
+  app.post('/deltas', requireLogin, requireBodyParams(['streamId','name']), function(req, res) {
+    var stream = req.streamMap[req.body.streamId];
+    if (!stream) {
+      renderWebpage('404', req, res);
+      return;
+    }
+    var delta = new Delta();
+    delta.set('streamId',stream.id);
+    delta.set('name',req.body.name);
+    delta.save().then(function(d) {
+      res.redirect('/streams/'+req.body.streamId+'#delta-'+d.id);
+    }, onWebError(req, res));
+  });
   // Sources
-  app.post('/sources', requireLogin, requireBodyParams(['deltaId','streamId','type','settings']), function(req, res) {
+  var sourceParams = ['deltaId','streamId','type','settings','name'];
+  app.post('/sources', requireLogin, requireBodyParams(sourceParams), function(req, res) {
     var delta = req.deltaMap[req.body.deltaId],
         source = null;
     if (!delta) {
       renderWebpage('404', req, res);
-    } else {
-      var types = req.body.type.split('-');
-      Source.factory({
-        name : req.body.settings,
-        settings : { query : req.body.settings },
-        type : types[0],
-        subtype : types.length > 1 ? types[1] : null,
-      }).then(function(s) {
-        source = s;
-        delta.add('sourceIds', s.id);
-        return delta.save();
-      }).then(function(d) {
-        res.redirect('/streams/'+req.body.streamId+'#source-'+source.id);
-      });
+      return;
     }
-
+    var types = req.body.type.split('-');
+    Source.factory({
+      name : req.body.name,
+      settings : { query : req.body.settings },
+      type : types[0],
+      subtype : types.length > 1 ? types[1] : null,
+    }).then(function(s) {
+      source = s;
+      delta.add('sourceIds', s.id);
+      return delta.save();
+    }).then(function(d) {
+      res.redirect('/streams/'+req.body.streamId+'#source-'+source.id);
+    }, onWebError(req, res));
   });
-
+  // Create static content
+  var contentsParams = ['streamId','sourceId','title','text','link','image','tags','params'];
+  app.post('/contents', requireLogin, requireBodyParams(contentsParams), function(req, res) {
+    var source = req.sourcesMap[req.body.sourceId];
+    if (!source) {
+      renderWebpage('404', req, res);
+      return;
+    }
+    var img = req.body.image.length ? { url : req.body.image } : null,
+        params = req.body.params.indexOf('{') === 0 ? JSON.parse(req.body.params) : {},
+        map = {};
+    map[req.body.link] = {
+      'source' : source,
+      'weight' : source.get('weight') || 1,
+      'title' : req.body['title'],
+      'text' : req.body['text'],
+      'tags' : req.body['tags'].split(','),
+      'images' : img ? [img] : [],
+      'timestamp' : new Date().getTime(),
+      'params' : params,
+      //'payload' : lastEntry,
+    };
+    Content.factory(map).then(function() {
+      res.redirect('/streams/'+req.body.streamId+'#source-'+source.id);      
+    }, onWebError(req, res));
+  });
   // Modify a stream item
   app.post('/stream_items/'+objectIdRegex, requireLogin, restfulObjectLookup(function(query) {
     query.include('stream');
@@ -453,17 +535,14 @@ function registerWeb() {
  ***************************************************************************************/
 exports.listen = function() {
 	app = express();
-  registerAPI();
-
   app.engine('jade', require('jade').__express);
   app.engine('ejs', require('ejs').__express);
   app.set('views', 'cloud/views');
   app.set('view engine','jade');
-  app.use(parseExpressHttpsRedirect());  // Require user to be on HTTPS.
   app.use(express.bodyParser());
   app.use(express.cookieParser('298oeuhd91hrajoe89g1234h9k09812'));
   app.use(parseExpressCookieSession({ cookie: { maxAge: 14400000 } }));
-
+  registerAPI();
 	registerWeb();
 	app.listen();
 };

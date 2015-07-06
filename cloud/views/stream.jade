@@ -25,13 +25,21 @@
             a.hashable(href='#integration')
               span.fa.fa-fw.fa-share-alt(id="stream-integration-icon")
               span Integration
-        .tab-content(id="stream",data-stream-id="#{stream.objectId}")
+        .tab-content(id="stream",data-stream-id="#{stream.objectId}",data-stream-cn="#{stream.canonicalName}")
           .tab-pane(id="delta")
             each delta in streamDeltas
               .delta(id="delta-#{delta.objectId}")
                 include ./delta.jade 
             .delta(id="delta-new")
               include ./delta-new.jade
+          .tab-pane(id="source")
+            each source in sources
+              .source(id="source-#{source.objectId}")
+                include ./source.jade
+          .tab-pane(id="fork")
+            each fork in forks
+              .source(id="fork-#{fork.objectId}")
+                include ./fork.jade
           .tab-pane(id="preview")
           .tab-pane(id="integration")
             h2 How To: Send a Digest Email

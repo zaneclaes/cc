@@ -61,8 +61,8 @@ exports.scrubJSON = function(obj, keysToRemove) {
   return item;
 }
 
-exports.arrayRemove = function(arr) {
-    var what, a = arguments, L = a.length, ax;
+exports.arrayRemove = function(arr, what) {
+    var a = arguments, L = a.length, ax;
     while (L > 1 && arr.length) {
         what = a[--L];
         while ((ax= arr.indexOf(what)) !== -1) {
@@ -94,6 +94,17 @@ exports.canonicalArray = function(arr) {
   for (var i in arr) {
     var v = exports.canonicalTag(arr[i]);
     if (v.length > 0 && ret.indexOf(v) < 0) {
+      ret.push(v);
+    }
+  }
+  return ret;
+}
+
+exports.arrayUnique = function(arr) {
+  var ret = [];
+  for (var i in arr) {
+    var v = arr[i];
+    if (ret.indexOf(v) < 0) {
       ret.push(v);
     }
   }

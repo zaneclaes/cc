@@ -1,40 +1,115 @@
-h1 #{delta.name}
-.col-md-5.col-md-offset-4
-  .panel.panel-default.center
-    .panel-heading
-      h3.panel-title
-        strong New Source
-    .panel-body
-      form#newdelta(role='form',action='/sources',method='POST')
-        input(type='hidden',name='deltaId',value='#{delta.objectId}')
-        input(type='hidden',name='streamId',value='#{stream.objectId}')
-        input#deltatype(type='hidden',name='type',value='')
-        .form-group
-          input#settings.form-control(type='text', placeholder='Delta Settings',name='settings')
-        .btn-group.pull-right
-          button.btn.btn-large.btn-info.dropdown-toggle(data-toggle="dropdown")
-            | Add a Source
-          ul.dropdown-menu.fa-ul
-            li
-              a(onclick="$('#deltatype').val('static'); $('#newdelta').submit();") 
-                span.fa.fa-link.fa-fw
-                | Static (Personal) Content
-            li
-              a(onclick="$('#deltatype').val('rss'); $('#newdelta').submit();") 
-                span.fa.fa-rss.fa-fw
-                | RSS Content
-            li
-              a(onclick="$('#deltatype').val('facebook'); $('#newdelta').submit();")
-                span.fa.fa-facebook.fa-fw
-                | Facebook Page
-            li
-              a(onclick="$('#deltatype').val('twitter'); $('#newdelta').submit();") 
-                span.fa.fa-twitter.fa-fw
-                | Twitter User
-            li
-              a(onclick="$('#deltatype').val('topic'); $('#newdelta').submit();") 
-                span.fa.fa-lightbulb-o.fa-fw
-                | Topic
-      // /.form
-    // ./panel-body
-  // ./panel
+h2 
+  span.fa.fa-filter.fa-fw
+  | Delta: #{delta.name}
+.row
+  .col-md-5.pull-left
+    h2 
+      span.fa.fa-tint.fa-fw
+      | Sources
+    each source in sources
+      -if (delta.sourceIds && delta.sourceIds.indexOf(source.objectId) >= 0)
+        h4 
+          -if (source.type === 'static')
+            span.fa.fa-link.fa-fw
+          -else if (source.type === 'facebook')
+            span.fa.fa-facebook.fa-fw
+          -else if (source.type === 'twitter')
+            span.fa.fa-twitter.fa-fw
+          -else if (source.type === 'topic')
+            span.fa.fa-slack.fa-fw
+          -else
+            span.fa.fa-rss.fa-fw
+          a.hashable(href="#source-#{source.objectId}") #{source.name}
+    -if (!delta.sourceIds || delta.sourceIds.length === 0)
+      p 
+        i You do not have any sources this delta.
+        br
+        br
+        i Nothing will appear in the stream until you add a source.
+  // ./col sources
+  .col-md-5.pull-right
+    h2 
+      span.fa.fa-code-fork.fa-fw
+      | Forks
+    each fork in forks
+      -if (delta.forkIds && delta.forkIds.indexOf(fork.objectId) >= 0)
+        h4 
+          span.fa.fa-code-fork.fa-fw
+          a.hashable(href="#fork-#{fork.objectId}") #{fork.name}
+    -if (!delta.forkIds || delta.forkIds.length === 0)
+      p 
+        i You do not have any forks on this delta.
+        br
+        br
+        i Forks can change the content before it hits the stream.
+  // ./col forks
+hr(style="width: 100%;")
+.row
+  .col-md-5.pull-left
+    .panel.panel-default.center
+      .panel-heading
+        h3.panel-title
+          strong
+            span.fa.fa-tint.fa-fw
+            | New Source
+      .panel-body
+        form#newdelta(role='form',action='/sources',method='POST')
+          input(type='hidden',name='deltaId',value='#{delta.objectId}')
+          input(type='hidden',name='streamId',value='#{stream.objectId}')
+          input#deltatype(type='hidden',name='type',value='')
+          .form-group
+            input.form-control(type='text', placeholder='Delta Name',name='name')
+          .form-group
+            input#settings.form-control(type='text', placeholder='Delta Query (if applicable)',name='settings')
+          .btn-group.pull-right
+            button.btn.btn-large.btn-info.dropdown-toggle(data-toggle="dropdown")
+              | Add a Source
+            ul.dropdown-menu.fa-ul
+              li
+                a(onclick="$('#deltatype').val('static'); $('#newdelta').submit();") 
+                  span.fa.fa-link.fa-fw
+                  | Static (Personal) Content
+              li
+                a(onclick="$('#deltatype').val('rss'); $('#newdelta').submit();") 
+                  span.fa.fa-rss.fa-fw
+                  | RSS Content
+              li
+                a(onclick="$('#deltatype').val('facebook'); $('#newdelta').submit();")
+                  span.fa.fa-facebook.fa-fw
+                  | Facebook Page
+              li
+                a(onclick="$('#deltatype').val('twitter'); $('#newdelta').submit();") 
+                  span.fa.fa-twitter.fa-fw
+                  | Twitter User
+              li
+                a(onclick="$('#deltatype').val('topic'); $('#newdelta').submit();") 
+                  span.fa.fa-slack.fa-fw
+                  | Tagged
+        // /.form
+      // ./panel-body
+    // ./panel
+  .col-md-5.pull-right
+    .panel.panel-default.center
+      .panel-heading
+        h3.panel-title
+          strong
+            span.fa.fa-code-fork.fa-fw
+            | New Fork
+      .panel-body
+        form#newfork(role='form',action='/forks',method='POST')
+          input(type='hidden',name='deltaId',value='#{delta.objectId}')
+          input(type='hidden',name='streamId',value='#{stream.objectId}')
+          input#forkId(type='hidden',name='forkId',value='')
+          .btn-group.pull-right
+            button.btn.btn-large.btn-info.dropdown-toggle(data-toggle="dropdown")
+              | Add a Fork
+            ul.dropdown-menu.fa-ul
+              each fork in forks
+                -if (!delta.forkIds || delta.forkIds.indexOf(fork.objectId) < 0)
+                  li
+                    a(onclick="$('#forkId').val('#{fork.objectId}'); $('#newfork').submit();") 
+                      span.fa.fa-code-fork.fa-fw
+                      | #{fork.name}
+        // /.form
+      // ./panel-body
+    // ./panel

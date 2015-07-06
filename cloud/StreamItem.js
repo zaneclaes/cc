@@ -25,6 +25,9 @@ var StreamItem = Parse.Object.extend("StreamItem", {
         status = self.get('status');
 
 		if(status !== StreamItem.STATUS_GATED || !forkIds || !forkIds.length) {
+      if (status === StreamItem.STATUS_GATED) {
+        this.set('status', StreamItem.STATUS_FORKED);
+      }
       return Parse.Promise.as(true);
 		}
 
@@ -84,7 +87,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
           built[relationship] = item;
         }
         else {
-          built[relationship] = StreamItem._factory(stream, delta, map[relationship]);
+          built[relationship] = StreamItem._factory(stream, delta, map[relationship], options);
           if (built[relationship]) {
           	toSave.push(built[relationship]);
           }
@@ -92,7 +95,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
       }
       for (var r in relationships) {
         var relationship = relationships[r];
-        built[relationship] = StreamItem._factory(stream, delta, map[relationship]);
+        built[relationship] = StreamItem._factory(stream, delta, map[relationship], options);
         if (built[relationship]) {
           toSave.push(built[relationship]);
         }
@@ -108,9 +111,9 @@ var StreamItem = Parse.Object.extend("StreamItem", {
   // Do any setup there
   // This is just for automatic (relationship) stuff
   //
-  _factory: function(stream, delta, o) {
+  _factory: function(stream, delta, o, options) {
   	var item = o.exportToStreamItem(delta),
-        holdHours = parseInt(delta.get('holdHours') || 0),
+        holdHours = options.isStatic ? 0 : parseInt(delta.get('holdHours') || 0),
         holdTime = (holdHours > 0 ? holdHours : 0) * 60 * 60 * 1000,
         timestamp = new Date().getTime() + holdTime,
         scheduledAt = new Date(timestamp);
