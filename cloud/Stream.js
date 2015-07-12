@@ -51,6 +51,9 @@ var Stream = Parse.Object.extend("Stream", {
     options.limit = options.limit || this.inferFetchLimit();
     options.offset = options.offset || 0;
     options.format = options.format || 'json';
+    options.order = options.order || 'scheduledAt';
+    options.direction = (options.direction || 'desc').toLowerCase().indexOf('asc') === 0 ? 'ascending' : 'descending';
+    options.age = parseInt(options.age || 0);
 
     // Will trigger a populate command...
     this.set('presentedAt', new Date());
@@ -63,6 +66,7 @@ var Stream = Parse.Object.extend("Stream", {
     var self = this,
         statuses = options.statuses || StreamItem.STREAM_STATUSES,
         query = new Parse.Query(StreamItem),
+        now = (new Date()).getTime(),
         scrub = ['populationIndex','populatedAt','presentedAt','user'],
         template = this.get('template') || {
           before : '<div class="deltas"><ul class="deltas-items">',
@@ -82,11 +86,17 @@ var Stream = Parse.Object.extend("Stream", {
     }
     query.equalTo('stream',this);
     query.lessThan('scheduledAt',new Date());
+    if (options.age) {
+      query.greaterThan('scheduledAt', new Date(now - options.age));
+    }
     query.containedIn('status',statuses);
     query.limit(options.limit);
     query.skip(options.offset);
-    query.descending('scheduledAt');
+    query[options.direction](options.order);
+
     return query.find().then(Stream.dedupe).then(function(items) {
+      return options.order === 'scheduledAt' ? self.schedule(items) : Parse.Promise.as(items);
+    }).then(function(items) {
       if (options.format === 'html') {
         for (var i in items) {
           var item = items[i],
@@ -163,6 +173,38 @@ var Stream = Parse.Object.extend("Stream", {
     });
   },
   /**
+   * Loops through stream_items and pegs them to the scheduling rules
+   */
+  schedule: function(items) {
+    if (!items || items.length <= 0) {
+      return Parse.Promise.as([]);
+    }
+    // Sort the items in ascending scheduled order
+    items = items.sort(function(a, b){
+      return a.get('scheduledAt').getTime() - b.get('scheduledAt').getTime();
+    });
+    var spacing = this.get('spacing') || (1000 * 60 * 60 * 4),
+        randomization = this.get('randomization') || (1000 * 60 * 60),
+        changed = false;
+    for (var i=1; i<items.length; i++) {
+      var lastItem = items[i-1],
+          item = items[i],
+          lastTime = lastItem.get('scheduledAt').getTime(),
+          rand = Math.floor(Math.random() * randomization) - randomization / 2,
+          nextTime = lastTime + spacing + rand,
+          minTime = lastTime + spacing - randomization / 2,
+          maxTime = lastTime + spacing + randomization / 2,
+          curTime = item.get('scheduledAt').getTime();
+
+      if (curTime < minTime || curTime > maxTime) {
+        // Was not in the acceptable zone for scheduling
+        item.set('scheduledAt',new Date(nextTime));
+        changed = true;
+      }
+    }
+    return changed ? Parse.Object.saveAll(items) : Parse.Promise.as(items);
+  },
+  /**
    * Fills up the stream with new StreamItem objects by calling fetchDeltas
    */
   populate: function(options) {
@@ -208,6 +250,23 @@ var Stream = Parse.Object.extend("Stream", {
    */
   inferFetchLimit: function() {
     return 20;
+  },
+  /**
+   * For items in the stream, update the click counts
+   */
+  updateClicks: function() {
+    var query = new Parse.Query(StreamItem),
+        now = (new Date()).getTime(),
+        upDate = new Date(now - StreamItem.CLICK_UPDATE_INTERVAL),
+        promises = [];
+    query.lessThan('clicksUpdatedAt',upDate);
+    query.limit(100);
+    return query.find().then(function(items) {
+      for (var i in items) {
+        promises.push(items[i].updateClicks());
+      }
+      return Parse.Promise.when(promises);
+    });
   },
 
 }, {
@@ -258,6 +317,25 @@ var Stream = Parse.Object.extend("Stream", {
     return Parse.Object.destroyAll(dupes).then(function(){
       return out;
     });
+  },
+  /**
+   * First, update the click count on all items in the stream
+   * Then, reschedule their times
+   */
+  schedule: function(items) {
+    var mapped = {},
+        streams = {},
+        promises = [];
+    for (var i in items) {
+      var stream = items[i].get('stream');
+      mapped[stream.id] = mapped[stream.id] || [];
+      mapped[stream.id].push(items[i]);
+      streams[stream.id] = stream;
+    }
+    for (var streamId in mapped) {
+      promises.push(streams[streamId].schedule(mapped[streamId]));
+    }
+    return Parse.Promise.when(promises);
   },
 });
 

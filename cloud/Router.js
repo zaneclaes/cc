@@ -41,6 +41,7 @@ function apiMiddleware(req, res, next) {
 	var vparts = req.url.match(apiRegex),
 			vstr = vparts && vparts.length > 0 ? vparts[0] : '/v1/';
 	req.apiVersion = parseInt(vstr.substring(2));
+  req.vars = req.vars || getJadeVariables(req);
 	next();	
 }
 
@@ -81,6 +82,15 @@ function registerAPI() {
 		}, exports.onError(req, res));
 	});
 
+  // GET stream_items/:id
+  var getImage = apiRegex+'stream_items/'+objectIdRegex+queryParamRegex+'$';
+  app.get(getImage, restfulObjectLookup(), function(req, res) {
+    req.stream_item.updateClicks().then(function() {
+      res.json(req.stream_item.present());
+    }, exports.onError(req, res));
+  });
+
+  // GET stream_items/:id/image
   var getImage = apiRegex+'stream_items/'+objectIdRegex+'/image'+queryParamRegex+'$';
   app.get(getImage, restfulObjectLookup(), function(req, res) {
     req.stream_item.thumbnail(req.query).then(function(fileUrl) {
@@ -139,13 +149,15 @@ function registerAPI() {
  ***************************************************************************************/
 function getJadeVariables(req) {
   // req: headers, url, signedCookies, method, ip, ips, subdomains, path, host, protocol
+  var root = req ? req.protocol+'://'+req.host : 'https://www.deltas.io';
   return {
-    root: req ? req.protocol+'://'+req.host : 'https://www.deltas.io',
+    root: root,
     title: "Surface What's Good",
     user: null,
     pathToAssets: '',
     pendingCount: 0,
     streamDeltas: false,
+    oauthCallback: root + "/oauth/callback",
   };
 }
 function renderLoginError(error, res) {
@@ -381,7 +393,7 @@ function requireLogin(req, res, next) {
 
     return Parse.Promise.when([
       qc ? qc.find() : Parse.Promise.as([]),
-      qi.find().then(Stream.dedupe),
+      qi.find().then(Stream.dedupe).then(Stream.schedule),
     ]);
   }).then(function(staticcontents, items) {
     mapObjectsOnRequest(req, 'staticcontents', staticcontents || []);
@@ -531,6 +543,52 @@ function registerWeb() {
       // NOP
       res.redirect('/scheduled');
     }
+  });
+
+  // Complete OAuth: GET /oauth/callback
+  app.get('/oauth/callback' + queryParamRegex + '$', function(req, res) {
+    var q = new Parse.Query(Fork),
+        fork = null,
+        settings = {};
+    q.equalTo('objectId',req.query.state);
+    q.first().then(function(f) {
+      fork = f;
+      settings = fork.get('settings');
+      return Parse.Cloud.httpRequest({
+        url: 'https://api-ssl.bitly.com/oauth/access_token',
+        body: {
+          client_id: settings.client_id,
+          client_secret: settings.client_secret,
+          redirect_uri: req.vars.oauthCallback,
+          code: req.query.code,
+        },
+        method: 'POST',
+        header:{
+          'Content-Type': 'application/json',
+        },
+      });
+    }).then(function(httpResponse) {
+      settings = CCObject.mapParams(httpResponse.text, settings);
+      fork.set('settings',settings);
+      return fork.save();
+    }).then(function(f) {
+      res.json({ state : req.query.state });
+    }, exports.onError(req, res));
+  });
+
+  // Start OAuth: GET /oauth
+  app.get('/oauth', function(req, res) {
+    var q = new Parse.Query(Fork),
+        fork = null,
+        settings = {};
+    q.equalTo('name','bitly');
+    q.first().then(function(fork) {
+      settings = fork.get('settings');
+      res.redirect("https://bitly.com/oauth/authorize?" +
+                   "client_id=" + settings.client_id +
+                   "&state=" + fork.id +
+                   "&redirect_uri=" + req.vars.oauthCallback);
+    }, exports.onError(req, res));
   });
 
   // Generic Page Renderer

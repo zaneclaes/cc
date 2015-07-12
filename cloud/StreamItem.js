@@ -14,7 +14,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
    */
   present: function() {
     return CCObject.scrubJSON(this, ['holdDate','operations','relationship','status','delta','stream',
-                                     'publisher','pendingForkIds','forkResults','contentScore']);
+                                     'publisher','pendingForkIds','forkResults','contentScore','content']);
   },
 	/**
 	 * Before Save
@@ -105,8 +105,45 @@ var StreamItem = Parse.Object.extend("StreamItem", {
       return thumbnails[key];
     });
   },
-
+  /**
+   * Fetch the click count from bitly (or wherever...)
+   */
+  updateClicks: function() {
+    var self = this,
+        clicks = this.get('clicks'),
+        clicksUpdatedAt = this.get('clicksUpdatedAt'),
+        age = (new Date()).getTime() - (clicksUpdatedAt ? clicksUpdatedAt.getTime() : 0),
+        forkResults = this.get('forkResults') || {},
+        forkIds = Object.keys(forkResults),
+        forkRes = null;
+    for (var forkId in forkResults) {
+      if (forkResults[forkId].type === Fork.TYPE_SHORTENER) {
+        forkRes = forkResults[forkId];
+        break;
+      }
+    }
+    // Throttling
+    if (!forkRes || age < StreamItem.CLICK_UPDATE_INTERVAL) {
+      return Parse.Promise.as(clicks);
+    }
+    return Fork.clicks(forkRes).then(function(c) {
+      if (c >= 0) {
+        CCObject.log("Clicks Determined: "+c,3);
+        clicks = c;
+        self.set('clicks',c);
+        self.set('clicksUpdatedAt',new Date());
+        return self.save();
+      }
+      else {
+        return c;
+      }
+    }).then(function() {
+      return clicks;
+    });
+  },
 }, {
+  CLICK_UPDATE_INTERVAL: 1000 * 60 * 60, // Throttler
+
 	// @Class
   STATUS_ACCEPTED: "accepted",   // Accepted by user; don't show in schedule
   STATUS_REJECTED: "rejected",   // Stream owner rejected content; do not show in queries.

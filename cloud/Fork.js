@@ -11,11 +11,22 @@ var Fork = Parse.Object.extend("Fork", {
 	 */
 	fork: function(streamItem, options) {
     var type = (this.get('type') || '').toLowerCase(),
-        name = (this.get('name') || '').toLowerCase();
+        name = (this.get('name') || '').toLowerCase(),
+        settings = this.get('settings') || {};
 
     CCObject.log('[Fork] forking '+type+'::'+name);
     if (name === Fork.BITLY) {
-      return URLTools.bitly(streamItem.get('url'), options);
+      return CCHttp.httpCachedRequest({
+        url: 'https://api-ssl.bitly.com/v3/shorten?' +
+             'access_token=' + settings.access_token +
+             '&longUrl=' + encodeURIComponent(streamItem.get('url')),
+        key: streamItem.get('url'),
+        cacheName: 'Bitly',
+        maxAge: -1, // never expire, always goood.
+        cacheValidation: function(obj) {
+          return obj && obj.data ? true : false;
+        }
+      });
     }
     else {
       return true;
@@ -75,6 +86,24 @@ var Fork = Parse.Object.extend("Fork", {
   BITLY: 'bitly',
   GAN: 'google analytics',
 
+  TYPE_SHORTENER: 'shortener',
+
+  /**
+   * For shorteners, get the # of clicks
+   */
+  clicks: function(forkResults) {
+    if (forkResults.name !== Fork.BITLY || !forkResults.settings) {
+      return Parse.Promise.as(-1);
+    }
+    return Parse.Cloud.httpRequest({
+      url: 'https://api-ssl.bitly.com/v3/link/clicks' +
+           '?access_token=' + forkResults.settings.access_token +
+           '&link=' + encodeURIComponent(forkResults.input.obj.data.url),
+    }).then(function(httpRequest) {
+      var json = JSON.parse( httpRequest.text );
+      return parseInt( json.data.link_clicks );
+    });
+  },
 	/**
 	 * The Delta has passed an array of forks to the streamItem
 	 * Operate on each of them. We use a serial chain of promises.
@@ -90,6 +119,9 @@ var Fork = Parse.Object.extend("Fork", {
         forkResults[forks[f].id] = {
           'input' : response,
           'output': forks[f].merge(response, streamItem),
+          'type' : forks[f].get('type'),
+          'name' : forks[f].get('name'),
+          'settings' : forks[f].get('settings') || {},
         };
         return true;
       });

@@ -1,5 +1,5 @@
 
-exports.LOG_PRIORITY_MIN = 2;
+exports.LOG_PRIORITY_MIN = 3;
 
 exports.log = function(str, priority) {
   priority = priority || 1;
@@ -31,6 +31,17 @@ exports.escapeHtml = function(text) {
   };
 
   return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+
+// Given "k1=v1&k2=v2" returns {k1: v1, k2: v2}
+exports.mapParams = function(str, map) {
+  var items = str.split('&');
+  map = map || {};
+  for (var i in items) {
+    var kv = items[i].split('=');
+    map[kv[0]] = kv.length > 1 ? kv[1] : false;
+  }
+  return map;
 }
 
 exports.timeUntil = function(date) {

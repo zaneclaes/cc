@@ -100,6 +100,23 @@ Parse.Cloud.job("populate", function(request, status) {
   }, Router.onError(request, status));
 });
 
+// Update clicks on items in streams that were presented recently
+Parse.Cloud.job("updateClicks", function(req, status) {
+  var query = new Parse.Query(Stream),
+      now = (new Date()).getTime(),
+      presDate = new Date(now - 1000 * 60 * 60), // anything we tried to present recently
+      promises = [];
+  query.greaterThan('presentedAt',presDate);
+  query.find().then(function(streams) {
+    for (var s in streams) {
+      promises.push(streams[s].updateClicks());
+    }
+    return Parse.Promise.when(promises);    
+  }).then(function(){
+    status.success('Updated Clicks on Streams: '+promises.length);
+  }, Router.onError(req, status));
+});
+
 function onBeforeSaveSuccess(res) {
   // Throw out obj, beforeSave can't handle it.
   return function(obj) {
