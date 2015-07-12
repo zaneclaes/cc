@@ -107,6 +107,7 @@ var Content = Parse.Object.extend("Content", {
     item.set('shortcode',date+'-'+name);
     item.set('matches', matches);
     item.set('matchCount', matchCount);
+    item.set('content',this);
     return item;
   },
 

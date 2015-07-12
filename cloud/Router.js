@@ -9,6 +9,7 @@ var isLocal = typeof __dirname !== 'undefined',
     Stream = require('cloud/Stream').Stream,
     StreamItem = require('cloud/StreamItem').StreamItem,
     express = require('express'),
+    Image = require('parse-image'),
     parseExpressHttpsRedirect = require('parse-express-https-redirect'),
   	parseExpressCookieSession = require('parse-express-cookie-session'),
     apiRegex = '^/api/v[0-9]{1}/',
@@ -19,11 +20,16 @@ var isLocal = typeof __dirname !== 'undefined',
 
 var app = null;
 
-function onWebError(req, res) {
+exports.onError = function(req, res) {
   return function(error) {
     CCObject.log('[ERROR]['+req.url+']',10);
     CCObject.log(error, 10);
-    res.error({'error' : error});
+    if (typeof res.json === 'function') {
+      res.json({'error' : error});
+    }
+    else {
+      res.error(error);
+    }
   };
 }
 
@@ -49,8 +55,9 @@ function registerAPI() {
         format = end[1].split('?')[0],
         root = getJadeVariables(req)['root'],
         json = {};
-		req.params.canonicalName = end[0];
-		Stream.find(req.params).then(function(s) {
+        
+		req.query.canonicalName = end[0];
+		Stream.find(req.query).then(function(s) {
       var params = JSON.parse( JSON.stringify( req.query ) );
       params.format = format;
       params.url = req.url;
@@ -71,8 +78,21 @@ function registerAPI() {
       else {
         res.json({'error' : format})
       }
-		}, onWebError(req, res));
+		}, exports.onError(req, res));
 	});
+
+  var getImage = apiRegex+'stream_items/'+objectIdRegex+'/image'+queryParamRegex+'$';
+  app.get(getImage, restfulObjectLookup(), function(req, res) {
+    req.stream_item.thumbnail(req.query).then(function(fileUrl) {
+      if (fileUrl) {
+        res.redirect(fileUrl);
+      }
+      else {
+        exports.onError(req, res)('No images found');
+      }
+    }, exports.onError(req, res));
+  });
+
 /*
 	// GET /sources/:id
 	app.get(apiRegex + 'sources/' + objectIdRegex, function(request, response) {
@@ -168,10 +188,12 @@ function renderWebpage(page, req, res) {
 function restfulObjectLookup(querySetupFunc, postFindFunc) {
   return function(req, res, next) {
     var parts = req.url.split('/'),
-        objectType = parts.length > 1 ? parts[1] : null,
-        objectId = parts.length > 2 ? parts[2] : null;
+        base = parts.length > 1 && parts[1] === 'api' ? 2 : 0,
+        objectType = parts.length > (base+1) ? parts[base+1] : null,
+        objectId = parts.length > (base+2) ? parts[base+2] : null,
+        onError = exports.onError(req, res);
     if (!objectType || !objectId || objectType.length <= 0 || objectId.length <= 0) {
-      res.error('Object ID lookup failed');
+      onError('Object ID lookup failed');
       return;
     }
     var objectTypeParts = objectType.split('_'),
@@ -186,24 +208,22 @@ function restfulObjectLookup(querySetupFunc, postFindFunc) {
     if (querySetupFunc) {
       querySetupFunc(query);
     }
-    query.first({
-      success: function(model) {
-        if (!model) {
-          res.error('No object existed for '+KlassName+'::'+objectId);
-        } else {
-          var objectTypeSing = objectType.slice(0, objectType.length-1);
-          req[objectTypeSing] = model;
-          req.vars[objectTypeSing] = JSON.parse( JSON.stringify( model ) );
-          if (postFindFunc) {
-            postFindFunc(req[objectTypeSing], next);
-          }
-          else {
-            next();
-          }
+    query.first().then(function(model) {
+      if (!model) {
+        onError('No object existed for '+KlassName+'::'+objectId+'::'+parts.join('/'));
+      } else {
+        var objectTypeSing = objectType.slice(0, objectType.length-1);
+        req[objectTypeSing] = model;
+        req.vars = req.vars || getJadeVariables(req);
+        req.vars[objectTypeSing] = JSON.parse( JSON.stringify( model ) );
+        if (postFindFunc) {
+          postFindFunc(req[objectTypeSing], next);
         }
-      },
-      error: res.error,
-    });
+        else {
+          next();
+        }
+      }
+    }, onError);
   }
 }
 
@@ -240,7 +260,7 @@ function populateUser(req, res, next) {
   }).then(function(streams) {
     req.streams = streams;
     next();
-  }, onWebError(req, res));
+  }, exports.onError(req, res));
 }
 function mapObjectsOnRequest(req, key, objects) {
   objects = objects || [];
@@ -275,15 +295,13 @@ function requireLogin(req, res, next) {
   query.equalTo('user',Parse.User.current());
   query.find().then(function(streams) {
     req.streams = streams;
-    var stream = null,
-        promises = [];
     req.streamMap = {};
+    var stream = null;
     for (var s in streams) {
       if (streamId && streams[s].id === streamId) {
         stream = streams[s];
       }
       streamIds.push(streams[s].id);
-      promises.push(streams[s].populate());
       req.streamMap[streams[s].id] = streams[s];
     }
     if (streamId) {
@@ -300,10 +318,7 @@ function requireLogin(req, res, next) {
     }
     var query = new Parse.Query(Delta);
     query.containedIn('streamId',streamIds);
-    promises = CCObject.arrayUnion([query.find()], promises);
-
-    // Populate all the streams, and find all the deltas...
-    return Parse.Promise.when(promises);
+    return query.find();
   }).then(function(deltas) {
     if (streamId) {
       req.streamDeltas = []; // Deltas for active steram
@@ -328,17 +343,34 @@ function requireLogin(req, res, next) {
     // Find related information
     var qs = new Parse.Query(Source);
     qs.containedIn('objectId',sourceIds);
+    qs.limit(1000);
 
     var qf = new Parse.Query(Fork);
     // n.b., returning all forks for now so that we can render them all as possible additions to a delta
     //qf.containedIn('objectId',forkIds);
 
+    return Parse.Promise.when([
+      qs.find(),
+      qf.find(),
+    ]);
+  }).then(function(sources, forks) {
+    mapObjectsOnRequest(req, 'sources', sources);
+    mapObjectsOnRequest(req, 'forks', forks);
+
+    // Find static content
     var qc = null;
-    if (req.stream) {
-      qc = new Parse.Query(StreamItem);
-      qc.containedIn('status',[StreamItem.STATUS_FORKED,StreamItem.STATUS_ACCEPTED,StreamItem.STATUS_GATED]);
-      qc.equalTo('stream', req.stream);
-      qc.descending('scheduledAt');
+    if (req.stream && sources && sources.length) {
+      var staticSources = [];
+      for (var s in sources) {
+        if (sources[s].get('type') === Source.TYPE_STATIC) {
+          staticSources.push(sources[s]);
+        }
+      }
+      if (staticSources.length > 0) {
+        qc = new Parse.Query(Content);
+        qc.containedIn('source', sources);
+        qc.descending('createdAt');
+      }
     } 
 
     // Find all the pending stream items that are forked or accepted
@@ -348,15 +380,12 @@ function requireLogin(req, res, next) {
     qi.containedIn('status',[StreamItem.STATUS_FORKED,StreamItem.STATUS_ACCEPTED]);
 
     return Parse.Promise.when([
-      qs.find(),
-      qf.find(),
       qc ? qc.find() : Parse.Promise.as([]),
-      qi.find().then(Stream.dedupe)
+      qi.find().then(Stream.dedupe),
     ]);
-  }).then(function(sources, forks, contents, items) {
-    mapObjectsOnRequest(req, 'sources', sources);
-    mapObjectsOnRequest(req, 'forks', forks);
-    mapObjectsOnRequest(req, 'streamitems', contents || []);
+  }).then(function(staticcontents, items) {
+    mapObjectsOnRequest(req, 'staticcontents', staticcontents || []);
+
     var itms = JSON.parse(JSON.stringify(items));
     for (var i in itms) {
       var date = new Date(itms[i].scheduledAt.iso);
@@ -368,7 +397,7 @@ function requireLogin(req, res, next) {
     req.vars.pendingCount = items.length;
     req.vars.pending = itms;
     next();
-  }, onWebError(req, res));
+  }, exports.onError(req, res));
 }
 
 /***************************************************************************************
@@ -401,12 +430,12 @@ function registerWeb() {
   app.post('/streams', requireLogin, function(req, res) {
     var stream = new Stream();
     stream.set('presentedAt', new Date(new Date().getTime() - 60000 * 60 * 24 * 30));
-    stream.set('lastPopulation', new Date(new Date().getTime() - 60000 * 60 * 24 * 30));
+    stream.set('populatedAt', new Date(new Date().getTime() - 60000 * 60 * 24 * 30));
     stream.set('name', req.body.name);
     stream.set('user', Parse.User.current());
     stream.save().then(function(s){
       res.redirect('/streams/'+s.id);
-    }, onWebError(req, res));
+    }, exports.onError(req, res));
   });
   // Individual stream page
   app.get('/streams/'+objectIdRegex, requireLogin, function(req, res) {
@@ -430,7 +459,7 @@ function registerWeb() {
     delta.set('name',req.body.name);
     delta.save().then(function(d) {
       res.redirect('/streams/'+req.body.streamId+'#delta-'+d.id);
-    }, onWebError(req, res));
+    }, exports.onError(req, res));
   });
   // Sources
   var sourceParams = ['deltaId','streamId','type','settings','name'];
@@ -453,7 +482,7 @@ function registerWeb() {
       return delta.save();
     }).then(function(d) {
       res.redirect('/streams/'+req.body.streamId+'#source-'+source.id);
-    }, onWebError(req, res));
+    }, exports.onError(req, res));
   });
   // Create static content
   var contentsParams = ['streamId','sourceId','title','text','link','image','tags','params'];
@@ -479,7 +508,7 @@ function registerWeb() {
     };
     Content.factory(map).then(function() {
       res.redirect('/streams/'+req.body.streamId+'#source-'+source.id);      
-    }, onWebError(req, res));
+    }, exports.onError(req, res));
   });
   // Modify a stream item
   app.post('/stream_items/'+objectIdRegex, requireLogin, restfulObjectLookup(function(query) {
@@ -497,7 +526,7 @@ function registerWeb() {
       req.stream_item.set('status',status);
       req.stream_item.save().then(function(obj) {
         res.redirect('/scheduled');
-      }, onWebError(req, res));
+      }, exports.onError(req, res));
     } else {
       // NOP
       res.redirect('/scheduled');

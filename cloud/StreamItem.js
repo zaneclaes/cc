@@ -1,5 +1,7 @@
 var CCObject = require('cloud/libs/CCObject'),
     Content = require('cloud/Content').Content,
+    Source = require('cloud/Source').Source,
+    Image = require('parse-image'),
     Fork = require('cloud/Fork').Fork;
 
 var StreamItem = Parse.Object.extend("StreamItem", {
@@ -47,6 +49,62 @@ var StreamItem = Parse.Object.extend("StreamItem", {
       return Fork.forkStreamItem(self, sortedForks, options);
     });
 	},
+  /**
+   * Get a resized version of the cover image
+   * Can take width/height as params
+   */
+  thumbnail: function(options) {
+    if (!this.has('images') || this.get('images').length <= 0) {
+      return Parse.Promise.as(false);
+    }
+    var self = this,
+        images = this.get('images'),
+        thumbnails = this.get('thumbnails') || {},
+        width = parseInt(options.width || 0),
+        height = parseInt(options.height || 0),
+        key = width + '_' + height,
+        url = (images[0].url.indexOf('//') === 0 ? 'http:' : '') + images[0].url,
+        base64 = null;
+    if (thumbnails[key]) {
+      return Parse.Promise.as(thumbnails[key]);
+    }
+    return Parse.Cloud.httpRequest({ url: url }).then(function(response) {
+      // Create an Image from the data.
+      return (new Image()).setData(response.buffer);
+    }).then(function(image) {
+      var opts = {};
+      if (width && height) {
+        opts.width = width;
+        opts.height = height;
+      }
+      else if (width) {
+        opts.ratio = width / image.width();
+      }
+      else if (height) {
+        opts.ratio = height / image.height();
+      }
+      else {
+        throw Error("No width/height");
+      }
+      // Scale the image to a certain size.
+      return image.scale(opts);
+    }).then(function(image) {
+      return image.setFormat("JPEG");
+    }).then(function(image) {
+      // Get the bytes of the new image.
+      return image.data();
+    }).then(function(data) {
+      base64 = data.toString("base64");
+      var file = new Parse.File("image.jpg", { base64: data.toString("base64") });
+      return file.save();
+    }).then(function(file) {
+      thumbnails[key] = file.url();
+      self.set('thumbnails',thumbnails);
+      return self.save();
+    }).then(function() {
+      return thumbnails[key];
+    });
+  },
 
 }, {
 	// @Class
@@ -58,7 +116,9 @@ var StreamItem = Parse.Object.extend("StreamItem", {
   STREAM_STATUSES: ["forked","accepted"],   // On a standard Stream query, for rendering, which statuses are acceptable?
 
   //
-  // Takes an object (Either Content or...?)
+  // Takes a Content object
+  // For dynamic sources, only returns new (saved) items
+  // For statics, returns the StreamItem representation in all cases
   //
   factory: function(stream, delta, objects, options) {
     var map = {},
@@ -77,31 +137,34 @@ var StreamItem = Parse.Object.extend("StreamItem", {
     return query.find().then(function(items) {
       CCObject.log('[ItemFactory] found item matches: '+items.length,3);
       var built = {},
-          toSave = [];
+          ret = [];
 
       for (var i in items) {
         var item = items[i],
             relationship = item.get('relationship');
         if(relationship) {
+          // Already had a representation
           relationships = CCObject.arrayRemove(relationships, relationship);
           built[relationship] = item;
         }
+        /* WUT? no relationship? We queried on it, it must exist...
         else {
-          built[relationship] = StreamItem._factory(stream, delta, map[relationship], options);
+          // Build a new streamitem 
+          built[relationship] = StreamItem.build(stream, delta, map[relationship], options);
           if (built[relationship]) {
-          	toSave.push(built[relationship]);
+          	ret.push(built[relationship]);
           }
-        }
+        }*/
       }
       for (var r in relationships) {
         var relationship = relationships[r];
-        built[relationship] = StreamItem._factory(stream, delta, map[relationship], options);
+        built[relationship] = StreamItem.build(stream, delta, map[relationship], options);
         if (built[relationship]) {
-          toSave.push(built[relationship]);
+          ret.push(built[relationship]);
         }
       }
-      CCObject.log('[ItemFactory] builds to save: '+toSave.length, 3);
-      return toSave;
+      CCObject.log('[ItemFactory] returning: '+ret.length, 3);
+      return ret;
     });
   },
 
@@ -111,17 +174,19 @@ var StreamItem = Parse.Object.extend("StreamItem", {
   // Do any setup there
   // This is just for automatic (relationship) stuff
   //
-  _factory: function(stream, delta, o, options) {
+  build: function(stream, delta, o, options) {
   	var item = o.exportToStreamItem(delta),
-        holdHours = options.isStatic ? 0 : parseInt(delta.get('holdHours') || 0),
+        source = o.get('source'),
+        isStatic = source && source.get('type') === Source.TYPE_STATIC,
+        holdHours = isStatic ? 0 : parseInt(delta.get('holdHours') || 0),
         holdTime = (holdHours > 0 ? holdHours : 0) * 60 * 60 * 1000,
         timestamp = new Date().getTime() + holdTime,
         scheduledAt = new Date(timestamp);
     item.set('stream',stream);
+    item.set('delta', delta);
     item.set('originalUrl',item.get('url'));
   	item.set('relationship', o.className+'_'+o.id);
     item.set('scheduledAt',scheduledAt);
-    item.set('delta', delta);
     item.set('pendingForkIds',delta.get('forkIds'));
    	return item;
   },

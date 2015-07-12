@@ -4,11 +4,6 @@ var CCObject = require('cloud/libs/CCObject'),
     StreamItem = require('cloud/StreamItem').StreamItem;
 
 /**
- * Max age for content, if maxContentAge not specified by the stream
- */
-var DEFAULT_MAX_CONTENT_AGE = 1000 * 60 * 60 * 24 * 7;
-
-/**
  * Streams have a 1:N relationship with Deltas
  * Doing a fetch on a Delta populates the Stream with StreamItems
  */
@@ -24,14 +19,15 @@ var Delta = Parse.Object.extend("Delta", {
         sourceIds = self.get('sourceIds');
     if (!sourceIds || sourceIds.length <= 0) {
       // With no sources attached, just query from all contentSources.
-      return self.fetchContent([], stream, options);
+      return self.fetchDynamic([], stream, options);
     }
     this.stream = stream;
     query.containedIn('objectId',sourceIds);
+    query.lessThanOrEqualTo('nextFetch', new Date());
     return query.find().then(function(sources) {
-      // Content sources (rss, prismatic, etc.) are bundled up and sent to fetchContent
+      // Content sources (rss, prismatic, etc.) are bundled up and sent to fetchDynamic
       // Static sources (recycling, etc.) are bundled up and sent to fetchStatic
-      var contentSources = [],
+      var dynamicSources = [],
           staticSources = [];
       for (var s in sources) {
         var source = sources[s];
@@ -39,23 +35,21 @@ var Delta = Parse.Object.extend("Delta", {
           staticSources.push(source);
         }
         else {
-          contentSources.push(source);
+          dynamicSources.push(source);
         }
       }
-      var promises = [],
-          allItems = [],
-          handler = function(items) {
-            allItems = CCObject.arrayUnion(allItems, items || []);
-          };
-
-      if (contentSources.length > 0 || (contentSources.length == 0 && staticSources.length == 0)) {
-        promises.push(self.fetchContent(contentSources, stream, options).then(handler));
+      var promises = [Parse.Promise.as([]), Parse.Promise.as([])];
+      if (dynamicSources.length > 0 || (dynamicSources.length == 0 && staticSources.length == 0)) {
+        promises[0] = self.fetchDynamic(dynamicSources, stream, options);
       }
       if (staticSources.length > 0) {
-        promises.push(self.fetchStatic(staticSources, stream, options).then(handler));
+        promises[1] = self.fetchStatic(staticSources, stream, options);
       }
-      return Parse.Promise.when(promises).then(function() {
-        return self.gateStreamItems(stream, allItems);
+      return Parse.Promise.when(promises).then(function(dynamics, statics) {
+        CCObject.log('[Delta '+self.id+'] got '+dynamics.length+':'+statics.length + ' from '+
+                        dynamicSources.length+':'+staticSources.length,3);
+        var items = CCObject.arrayUnion(dynamics || [], statics || []);
+        return self.gateStreamItems(stream, items);
       });
     });
   },
@@ -66,7 +60,7 @@ var Delta = Parse.Object.extend("Delta", {
    * but first we choose statuses based upon
    */
   gateStreamItems: function(stream, items) {
-    CCObject.log('[Delta] gating '+items.length,3);
+    CCObject.log('[Delta '+this.id+'] gating '+items.length,3);
     if (items.length <= 0) {
       return items;
     }
@@ -75,15 +69,17 @@ var Delta = Parse.Object.extend("Delta", {
     var self = this,
         deltaWeight = this.get('weight') || 1,
         limit = this.get('limit') || items.length,
-        rate = this.get('rate') || 0,
         hostWeights = this.get('hostWeights') || {};
     for (var i in items) {
       var item = items[i],
+          source = item.get('source'),
+          isStatic = source && source.get('type') === Source.TYPE_STATIC,
+          staticWeight = isStatic ? 2 : 1, // TODO: increment static weight over time??
           baseScore = item.get('contentScore') || item.get('score'),
           matchCount = item.get('matchCount') || 1,
           host = item.get('host') || '',
           hostWeight = parseFloat(hostWeights[host] || 1),
-          score = baseScore * matchCount * matchCount * deltaWeight * hostWeight;
+          score = baseScore * matchCount * matchCount * deltaWeight * hostWeight * staticWeight;
       item.set('score', score);
     }
 
@@ -92,11 +88,27 @@ var Delta = Parse.Object.extend("Delta", {
     items = items.sort(function(a, b){
       return (b.get('score') || 0) - (a.get('score') || 0);
     });
+    var sourcesToSave = [];
     for (var i=0; i<limit && i<items.length; i++) {
-      items[i].set('status', StreamItem.STATUS_GATED);
+      var item = items[i],
+          source = item.get('source'),
+          isStatic = source && source.get('type') === Source.TYPE_STATIC;
+      item.set('status', StreamItem.STATUS_GATED);
+      if(isStatic) {
+        var sourceRate = source.has('rate') ? source.get('rate') : (1000 * 60 * 60 * 24);// 24hr default static rate
+        var rand = source.has('rateVariation') ? source.get('rateVariation') : (1000 * 60 * 60 * 6);
+        sourceRate += Math.floor(Math.random() * rand ) - ( rand / 2 );
+        source.set('nextFetch', new Date((new Date()).getTime() + sourceRate));
+        sourcesToSave.push(source);
+      }
     }
-    self.set('nextFetch', new Date((new Date()).getTime() + rate));
-    return Parse.Object.saveAll(items);
+    var toSave = CCObject.arrayUnion(items, sourcesToSave);
+    if (this.has('rate') > 0) {
+      self.set('nextFetch', new Date((new Date()).getTime() + this.get('rate')));
+      toSave.push(self);
+    }
+
+    return Parse.Object.saveAll(toSave);
   },
   /**
    * Fetches posts for the stream from the Content table
@@ -104,14 +116,16 @@ var Delta = Parse.Object.extend("Delta", {
    *
    * @return An array of StreamItem objects
    */
-  fetchContent: function(sources, stream, options) {
+  fetchDynamic: function(sources, stream, options) {
     var self = this,
         query = new Parse.Query(Content),
         offset = options.offset || 0,
         limit = options.limit || 100,
-        minImages = this.has('minImages') ? this.get('minImages') : 1,
-        maxContentAge = parseInt(this.get('maxContentAge')) || DEFAULT_MAX_CONTENT_AGE,
-        publishedDate = new Date(new Date().getTime() - maxContentAge),
+        order = options.order || 'score',
+        direction = options.direction || 'descending',
+        minImages = this.has('minImages') ? this.get('minImages') : 0,
+        maxContentAge = parseInt(this.get('maxContentAge')),
+        publishedDate = maxContentAge ? new Date(new Date().getTime() - maxContentAge) : false,
         velocity = options.velocity || 0,
         shares = options.shares || 0,
         blacklist = this.get('blacklist'),
@@ -140,7 +154,7 @@ var Delta = Parse.Object.extend("Delta", {
         sourceIds.push(sources[s].id);
       }
       query.containedIn('source',sources);
-      log.push('sources [] ' + sourceIds.length);
+      log.push('sources: ' + sourceIds.join(','));
     }
     // Specific content types
     if (contentTypes && contentTypes.length) {
@@ -148,8 +162,10 @@ var Delta = Parse.Object.extend("Delta", {
       log.push('type [] ' + contentTypes.join(','));
     }
     // Do not include content without images, or NSFW
-    query.greaterThanOrEqualTo('imageCount',minImages);
-    log.push('imageCount >= '+minImages);
+    if (minImages > 0) {
+      query.greaterThanOrEqualTo('imageCount',minImages);
+      log.push('imageCount >= '+minImages);
+    }
 
     // Never include NSFW, for now, though allow unverified (undefined) to get thru
     query.notEqualTo('nsfw',true);
@@ -173,11 +189,15 @@ var Delta = Parse.Object.extend("Delta", {
     // Order, offset, etc.
     query.limit(limit);
     query.skip(offset);
-    query.descending('score'); // createdAt??
+    if (direction === 'ascending') {
+      query.ascending(order);
+    }
+    else {
+      query.descending(order);
+    }
     // Main search string filters
-    CCObject.log('[Delta] search: '+log.join(' | '),2);
     return query.find().then(function(contents) {
-      CCObject.log('[Delta] found content: '+contents.length,2);
+      CCObject.log('[Delta '+self.id+'] Found '+contents.length+': '+log.join(' | '),2);
       return StreamItem.factory(stream, self, contents, options);
     });
   },
@@ -190,17 +210,27 @@ var Delta = Parse.Object.extend("Delta", {
    */
   fetchStatic: function(sources, stream, options) {
     var self = this,
-        query = new Parse.Query(Content),
-        limit = 1;
+        query = new Parse.Query(Content);
     query.containedIn("source",sources);
-    //query.equalTo("static",true);
     query.descending("score");
-    query.limit(limit);
-    return query.find().then(function(contents) {
-      CCObject.log('[Delta] found statics: '+contents.length,3);
-      options = JSON.parse( JSON.stringify( options ) );
-      options.isStatic = true;
-      return StreamItem.factory(stream, self, contents, options);
+    return query.count().then(function(cnt) {
+      // Random ordering simulation: count the results, then randomly skip
+      if (cnt <= 0) {
+        return Parse.Promise.as([]);
+      }
+      else {
+        query.skip( Math.floor(Math.random() * cnt ) );
+        query.limit(1);
+        query.include('source');
+        return query.find();
+      }
+    }).then(function(contents) {
+      CCObject.log('[Delta '+self.id+'] found statics: '+contents.length,3);
+      var ret = [];
+      for (var c in contents) {
+        ret.push(StreamItem.build(stream, self, contents[c], options));
+      }
+      return ret;
     });
   },
   /**

@@ -16,17 +16,25 @@
                 a(href="#{item.originalUrl}",target="_blank") #{item.title}
               code #{item.url}
               p #{item.text}
-              hr
-              p 
-                b Scheduled: 
-                | #{item.untilScheduled} 
-                i (#{item.scheduledAt})
-                br
-                b Matches: 
-                i "#{item.matches}"
-                br 
-                b Score: 
-                i #{item.score}
+              table
+                tr
+                  td(style="width: 100px;") 
+                    b Scheduled: 
+                  td 
+                    | #{item.untilScheduled} 
+                    i (#{item.scheduledAt})
+                tr
+                  td
+                    b Matches: 
+                  td
+                    "#{item.matches}"
+                tr 
+                  td
+                    b Score: 
+                  td
+                    i #{item.score}
+              br
               form(method="post",action="/stream_items/#{item.objectId}")
                 button.btn.btn-danger(type='submit',name='reject') Reject
                 // button.btn.btn-success.pull-right(type='submit',name='accept') Accept
+              hr

@@ -46,7 +46,7 @@ function extractTags(item, options) {
  * No link in a RSS feed matching any of these will ever become content
  */
 var globalBlacklist = [
-	'reddit', 'kickstarter', 'feedsportal', 'instructables', 'google,'
+	'reddit', 'kickstarter', 'feedsportal', 'instructables', 'google', 'naturalnews',
 ];
 
 /**
@@ -245,7 +245,7 @@ var Source = Parse.Object.extend("Source", {
 	},
 	_rss: function(rssUrl, source, options) {
 	  var validator = function(obj) {
-	        return obj && obj.responseData && obj.responseData.feed && obj.responseData.feed.entries ? true : false;
+	        return obj && obj.responseData && obj.responseData.feed && obj.responseData.feed.entries;
 	      },
 	  		url = 'https://ajax.googleapis.com/ajax/services/feed/load?v=1.0&q=' + encodeURIComponent(rssUrl);
 	  //obj.responseData.feed.[entries|feedUrl|title|link|author|description|type]
@@ -267,7 +267,7 @@ var Source = Parse.Object.extend("Source", {
 	          blacklisted = false;
 	      // We don't actually want content from reddit itself...
 	      for (var b in globalBlacklist) {
-	        var regExp = new RegExp('^https?://([\w\d]+\.)?'+globalBlacklist[b]+'\.com');
+	        var regExp = new RegExp('^https?://([\w\d]+\.)?'+globalBlacklist[b]);
 	        if (!url || url.match(regExp)) {
 	          blacklisted = true;
 	          break;
@@ -276,13 +276,14 @@ var Source = Parse.Object.extend("Source", {
 	      if (blacklisted) {
 	        continue;
 	      }
-
+	      content = (lastEntry['content'] || lastEntry['contentSnippet']) || '';
+	     	content = content.split('<p>The post <a')[0];
 	      contentMap[url] = {
 	        'source' : source,
 	        'weight' : source.get('weight') || 1,
 	        'title' : lastEntry['title'],
 	        'publisher' : { 'title' : lastEntry['author'] },
-	        'text' : lastEntry['contentSnippet'],
+	        'text' : content,
 	        'tags' : lastEntry['categories'],
 	        'images' : normalizeImages(lastEntry['mediaGroups']),
 	        'timestamp' : new Date(lastEntry['publishedDate']).getTime(),

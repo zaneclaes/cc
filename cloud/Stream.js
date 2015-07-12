@@ -8,16 +8,19 @@ var CCObject = require('cloud/libs/CCObject'),
  * Max age for content, if maxContentAge not specified by the stream
  */
 var DEFAULT_MAX_CONTENT_AGE = 1000 * 60 * 60 * 24 * 7;
-var DEFAULT_POPULATION_THROTTLE = 0;// 60000;
 
 var Stream = Parse.Object.extend("Stream", {
   // @Instance
 
   onBeforeSave: function() {
-    var self = this;
+    var self = this,
+        popDate = this.get('populatedAt');
+    if (!popDate) {
+      this.set('populatedAt', new Date((new Date()).getTime() - 1000 * 60 * 60 * 24));
+    }
     return this._generateCanonicalName(CCObject.canonicalName(this.get('name'))).then(function(cn) {
       self.set('canonicalName',cn);
-      return self.populate();
+      return true; //self.populate();
     });
   },
 
@@ -38,13 +41,6 @@ var Stream = Parse.Object.extend("Stream", {
       }
     });
   },
-  // Rate limiting
-  isThrottled: function() {
-    var presentedTime = this.has('presentedAt') ? this.get('presentedAt').getTime() : 0,
-        now = (new Date()).getTime(),
-        age = now - presentedTime;
-    return age < DEFAULT_POPULATION_THROTTLE;
-  },
   /**
    * First, calls out to Populate in order to fill up StreamItems
    * Then queries stream items in order to return them to the client
@@ -55,11 +51,6 @@ var Stream = Parse.Object.extend("Stream", {
     options.limit = options.limit || this.inferFetchLimit();
     options.offset = options.offset || 0;
     options.format = options.format || 'json';
-
-    // Rate limiting: don't populate, we've presented recently.
-    if (this.isThrottled()) {
-      return self._present(options);
-    }
 
     // Will trigger a populate command...
     this.set('presentedAt', new Date());
@@ -72,7 +63,7 @@ var Stream = Parse.Object.extend("Stream", {
     var self = this,
         statuses = options.statuses || StreamItem.STREAM_STATUSES,
         query = new Parse.Query(StreamItem),
-        scrub = ['populationIndex','lastPopulation','presentedAt','user'],
+        scrub = ['populationIndex','populatedAt','presentedAt','user'],
         template = this.get('template') || {
           before : '<div class="deltas"><ul class="deltas-items">',
           item : '<li class="deltas-item"><img src="#{imageUrl}" /><h3><a href="#{url}" target="_blank">#{title}</a></h3><p>#{text}</p></li>',
@@ -85,16 +76,6 @@ var Stream = Parse.Object.extend("Stream", {
     else if (options.format === 'rss') {
       out = new XMLWriter();
       out.startDocument();
-      out.startElement('rss').writeAttribute('version','2.0').
-                              writeAttribute('xmlns:atom','http://www.w3.org/2005/Atom');
-      out.startElement('channel');
-      out.startElement('title').text(this.get('name')).endElement();
-      out.startElement('link').text(options.link).endElement();
-      out.startElement('atom:link').writeAttribute('rel','self').
-                                    writeAttribute('href',options.link).
-                                    endElement();
-      out.startElement('description').text(this.get('description') || this.get('name')).endElement();
-      out.startElement('language').text('en-us').endElement();
     }
     else {
       out = CCObject.scrubJSON(this, scrub);
@@ -128,6 +109,20 @@ var Stream = Parse.Object.extend("Stream", {
         out += template.after;
       }
       else if (options.format === 'rss') {
+        var item = items.length > 0 ? items[0] : false,
+            desc = item ? item.get('title') : self.get('description');
+
+        out.startElement('rss').writeAttribute('version','2.0').
+                                writeAttribute('xmlns:atom','http://www.w3.org/2005/Atom');
+        out.startElement('channel');
+        out.startElement('title').text(self.get('name')).endElement();
+        out.startElement('link').text(options.link).endElement();
+        out.startElement('atom:link').writeAttribute('rel','self').
+                                      writeAttribute('href',options.link).
+                                      endElement();
+        out.startElement('description').text(desc || self.get('name')).endElement();
+        out.startElement('language').text('en-us').endElement();
+
         for (var i in items) {
           var item = items[i],
               desc = item.get('text'),
@@ -135,16 +130,22 @@ var Stream = Parse.Object.extend("Stream", {
           out.startElement('item');
           out.startElement('title').text(item.get('title')).endElement();
           out.startElement('link').text(item.get('url')).endElement();
-          out.startElement('author').text(item.get('host')).endElement();
+          //out.startElement('author').text(item.get('host')).endElement();
           out.startElement('guid').writeAttribute('isPermaLink','false').text(item.id).endElement();
           out.startElement('pubDate').text((item.get('scheduledAt') || new Date()).toUTCString()).endElement();
           if (images && images.length > 0) {
-            var imgUrl = (images[0].url.indexOf('//') === 0 ? 'http:' : '') + images[0].url;
+           // var imgUrl = (images[0].url.indexOf('//') === 0 ? 'http:' : '') + images[0].url;
+            var imgUrl = 'http://www.deltas.io/api/v1/stream_items/' + item.id + '/image?width=240';
             out.startElement('enclosure').writeAttribute('type','image/jpeg').
                                           writeAttribute('url',imgUrl).
                                           endElement();
-            desc += ' <img src="' + imgUrl + '" />';
+            desc = '<center><a href="' + item.get('url') + '" ><img src="' + imgUrl + '" /></a></center><br />'+desc;
           }
+
+          if (options.paragraphs) {
+            desc = desc.split('</p>').slice(0, parseInt(options.paragraphs)).join('</p>');
+          }
+          
           out.startElement('description').text(desc).endElement();
           out.endElement();
         }
@@ -163,22 +164,11 @@ var Stream = Parse.Object.extend("Stream", {
   },
   /**
    * Fills up the stream with new StreamItem objects by calling fetchDeltas
-   * Happens as a beforeSave
    */
   populate: function(options) {
     options = options || {};
     var self = this,
-        allItems = [],
-        expectedPopulationIndex = parseInt(this.get('populationIndex') || 0);
-
-    // Rate limiting: don't populate, we've presented recently.
-    if (this.isThrottled()) {
-      return Parse.Promise.as([]);
-    }
-
-    // Rate limit population
-    this.increment('populationIndex');
-    CCObject.log('[Stream '+this.id+'] Populating ['+expectedPopulationIndex+']...',3);
+        allItems = [];
 
     // First, get the most recent existing StreamItem object so we can query on the date
     var query = new Parse.Query(StreamItem);
@@ -190,25 +180,7 @@ var Stream = Parse.Object.extend("Stream", {
       if (item && item.createdAt) {
         options.startDate = item.createdAt;
       }
-      // Before we do the fetchDeltas, let's make sure that we're not in a race
-      // condition on the populationIndex
-      query = new Parse.Query(Stream);
-      query.equalTo('objectId',self.id);
-      return query.first();
-    }).then(function(stream) {
-      if (!stream || parseInt(stream.get('populationIndex') || 0) !== expectedPopulationIndex) {
-        if (stream) {
-          CCObject.log('[Stream '+self.id+'] skipping population because index was '+stream.get('populationIndex')+
-                       ' instead of '+expectedPopulationIndex+'',3);
-          CCObject.log(stream, 3);
-        }
-        return [];
-      }
-      else {
-        return self.fetchDeltas(options);
-      }
-    }).then(function(built) {
-      return CCObject.arrayUnion(allItems, built);
+      return self.fetchDeltas(options);
     });
   },
   /**
@@ -222,12 +194,12 @@ var Stream = Parse.Object.extend("Stream", {
     query.equalTo('streamId',this.id);
     query.lessThanOrEqualTo('nextFetch', new Date());
     return query.find().then(function(deltas) {
-      var chain = null;
+      CCObject.log('[Stream '+self.id+'] Populating '+deltas.length+' Deltas...',2);
+      var promises = [];
       for (var d in deltas) {
-        var p = deltas[d].fetch(self, options);
-        chain = chain ? chain.then(p) : p;
+        promises.push(deltas[d].fetch(self, options));
       }
-      return chain;
+      return Parse.Promise.when(promises);
     });
   },
   /**

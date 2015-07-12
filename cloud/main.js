@@ -9,6 +9,11 @@ var isLocal = typeof __dirname !== 'undefined',
     StreamItem = require('cloud/StreamItem').StreamItem,
     Router = require('cloud/Router');
 
+/*
+http://www.colourlovers.com/palette/27905/threadless
+http://getbootstrap.com/2.3.2/components.html
+*/
+
 /*************************************************************************************
 * Public API [Endpoints]
  ************************************************************************************/
@@ -19,26 +24,21 @@ Router.listen();
 * Internal API [Cloud Functions]
  ************************************************************************************/
 
-function onApiError(req, res) {
-  return function(error) {
-    CCObject.log('[ERROR][API]',10);
-    CCObject.log(error,10);
-    res.error({'error' : error});
-  };
-}
-
 // Get a stream by a given stream ID
 Parse.Cloud.define("stream", function(request, response) {
 	Stream.find(request.params).then(function(s) {
     return s.present();
   }).then(function(json) {
     response.success(json.items);
-  }, onApiError(request, response));
+  }, Router.onError(request, response));
 });
 
 // Tag a URL?
 Parse.Cloud.define("tag", function(request, response) {
-	Analyzer.metaTags(request.params.url).then(response.success, onApiError(request, response));
+	Analyzer.metaTags(request.params.url).then(
+    response.success, 
+    Router.onError(request, response)
+  );
 });
 
 // Get a content by a given objectId or name
@@ -51,7 +51,10 @@ Parse.Cloud.define("item", function(request, response) {
 	else if (request.params.shortcode && request.params.shortcode.length) {
 		query.equalTo('shortcode', request.params.shortcode);
 	}
-	query.first().then(response.success, onApiError(request, response));
+	query.first().then(
+    response.success, 
+    Router.onError(request, response)
+  );
 });
 
 /*************************************************************************************
@@ -64,7 +67,7 @@ Parse.Cloud.job("ingest", function(request, status) {
 	Parse.Cloud.useMasterKey();
   Source.ingest().then(function(res) {
   	status.success('ingested in '+(((new Date).getTime() - startTime)/1000) + 'sec');
-  }, onApiError(request, status));
+  }, Router.onError(request, status));
 });
 
 Parse.Cloud.job("analyze", function(request, status) {
@@ -73,7 +76,28 @@ Parse.Cloud.job("analyze", function(request, status) {
 	Parse.Cloud.useMasterKey();
   Content.analyze().then(function(res) {
   	status.success('ingested in '+(((new Date).getTime() - startTime)/1000) + 'sec');
-  }, onApiError(request, status));
+  }, Router.onError(request, status));
+});
+
+Parse.Cloud.job("populate", function(request, status) {
+  var query = new Parse.Query(Stream),
+      now = (new Date()).getTime(),
+      presDate = new Date(now - 1000 * 60 * 60), // anything we tried to present recently
+      popDate = new Date(now - 1000 * 60),
+      cnt = 0;
+  query.greaterThan('presentedAt',presDate);
+  query.lessThan('populatedAt',popDate);
+  query.find().then(function(streams) {
+    cnt = streams ? streams.length : -1;
+    streams = streams || [];
+    var promises = [];
+    for (var s in streams) {
+      promises.push(streams[s].populate());
+    }
+    return Parse.Promise.when(promises);
+  }).then(function(){
+    status.success('Populated '+cnt);
+  }, Router.onError(request, status));
 });
 
 function onBeforeSaveSuccess(res) {
@@ -86,14 +110,14 @@ function onBeforeSaveSuccess(res) {
 Parse.Cloud.beforeSave("Content", function(request, response) {
 	request.object.analyze().then(
     onBeforeSaveSuccess(response), 
-    onApiError(request, response)
+    Router.onError(request, response)
   );
 });
 
 Parse.Cloud.beforeSave("StreamItem", function(request, response) {
 	request.object.fork().then(
     onBeforeSaveSuccess(response), 
-    onApiError(request, response)
+    Router.onError(request, response)
   );
 });
 
@@ -104,9 +128,16 @@ Parse.Cloud.beforeSave("Delta", function(request, response) {
   response.success();
 });
 
+Parse.Cloud.beforeSave(Source, function(request, response) {
+  if (!request.object.has('nextFetch')) {
+    request.object.set('nextFetch', new Date());
+  }
+  response.success();
+});
+
 Parse.Cloud.beforeSave(Stream, function(request, response) {
-	request.object.onBeforeSave().then(
+  request.object.onBeforeSave().then(
     onBeforeSaveSuccess(response), 
-    onApiError(request, response)
+    Router.onError(request, response)
   );
 });

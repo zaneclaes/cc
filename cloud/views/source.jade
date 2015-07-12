@@ -2,13 +2,14 @@ h2
   span.fa.fa-tint.fa-fw
   | Source: #{source.name}
 ul.fa-ul
-  each item in streamitems
-    -if (item.source && item.source.objectId === source.objectId)
+  each content in staticcontents
+    -if (content.source && content.source.objectId === source.objectId)
       li
-        span.fa.fa-li.fa-link
-        a(href="#{item.originalUrl}",target="_blank") #{item.title}
-        code #{item.url}
-        p #{item.text}
+        h4
+          span.fa.fa-li.fa-link
+          a(href="#{content.url}",target="_blank") #{content.title}
+        code #{content.url}
+        p #{content.text}
 -if (source.type === 'static')
   .container
     .col-md-5.col-md-offset-4
