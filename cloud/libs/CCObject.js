@@ -69,6 +69,11 @@ exports.scrubJSON = function(obj, keysToRemove) {
   for (var s in keysToRemove) {
     delete item[keysToRemove[s]];
   }
+  for (var k in item) {
+    if (item[k].__type === 'Date') {
+      item[k] = item[k].iso;
+    }
+  }
   return item;
 }
 

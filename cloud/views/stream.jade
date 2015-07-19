@@ -1,9 +1,11 @@
 .container
   .row-fluid
     .span12.top
-      h1
-        span.fa.fa-fw.fa-rss
-        span #{stream.name}
+      form.editable#changeStreamName(method="POST",action="#{root}/streams/#{stream.objectId}")
+        h1.clickable(data-form="changeStreamName")
+          span.fa.fa-fw.fa-rss
+          span #{stream.name}
+        input.form-control(type='text', placeholder='Stream Name',name='name')
       .tabbable
         ul.nav.nav-tabs(id="stream-tabs")
           li.dropdown
@@ -42,17 +44,20 @@
                 include ./fork.jade
           .tab-pane(id="preview")
           .tab-pane(id="integration")
-            h2 How To: Send a Digest Email
-            p Create a stream for your blog. Set the title to latest post. Connect to mailchimp. Pro: add quotes and other link sources.
-            h2 How To: Post to Social Media
-            p Use IFTT to connect your RSS feed
-            h2 How To: Embed in your Blog
-            p Use the Templated HTML along with your own custom CSS, and just ajax load the HTML into a div.
+            h2 Embed This Stream
+            ul
+              li Add this div to your page:
+                code &lt;div class="deltas" data-stream="#{stream.canonicalName}" /&gt;
+              li Make sure you have JQuery on your page
+              li Add the deltas script to your page:
+                code &lt;script src="//www.deltas.io/dist/js/deltas.io.js" &gt;
+              li Customize the CSS of your stream, or just include this CSS file:
+                code &lt;link rel="stylesheet" href="//www.deltas.io/dist/css/styles/default.css" &gt;
+            h2 Other Integration Options
             h4 RSS Feed:
-            code https://www.deltas.io/api/v1/streams/#{stream.canonicalName}.rss
+            code http://www.deltas.io/api/v1/streams/#{stream.canonicalName}.rss
             h4 Templated HTML:
-            code https://www.deltas.io/api/v1/streams/#{stream.canonicalName}.html
+            code http://www.deltas.io/api/v1/streams/#{stream.canonicalName}.html
             h4 JSON:
-            code https://www.deltas.io/api/v1/streams/#{stream.canonicalName}.json
+            code http://www.deltas.io/api/v1/streams/#{stream.canonicalName}.json
 // /.container
-script(src='#{pathToAssets}/dist/js/stream.js')

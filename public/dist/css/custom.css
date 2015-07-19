@@ -45,6 +45,31 @@ a {
   color: #3A89C9;
 }
 
+.deltas ul {
+  padding: 0;
+}
+.deltas-item {
+  list-style: none;
+  border: 1px solid #ccc;
+  padding: 0;
+}
+.deltas-item img {
+  max-width: 100%;
+}
+.deltas-content {
+  padding: 10px;
+}
+
+/* Editable */
+form.editable .clickable {
+  cursor: pointer;
+}
+form.editable input {
+  display: none;
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+
 /* GLOBAL STYLES
 -------------------------------------------------- */
 /* Padding below the footer and lighter body text */

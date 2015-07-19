@@ -1,4 +1,5 @@
 var CCObject = require('cloud/libs/CCObject'),
+    CCHttp = require('cloud/libs/CCHttp'),
     URLTools = require('cloud/libs/URLTools');
 
 var Fork = Parse.Object.extend("Fork", {

@@ -261,21 +261,22 @@ var Content = Parse.Object.extend("Content", {
   // @Class
 
   // Known keys...
-  _keys: ['url','title','tags','images','publisher','text','timestamp','source','weight'],
+  _keys: ['url','title','tags','images','publisher','text','timestamp','source','weight','params'],
 
   //
   // Takes a map of URLs => what we know about them
   //
-  factory: function(map) {
+  factory: function(map, source) {
     var urls = Object.keys(map),
-        query = new Parse.Query(Content);
+        toSave = [],
+        built = {};
 
+    // Dynamic content is de-duped
+    var query = new Parse.Query(Content);
     query.containedIn("url", urls);
+    query.equalTo('source',source);
     return query.find().then(function(contents) {
       //CCObject.log('found content matches: '+contents.length);
-      var built = {},
-          toSave = [];
-
       for (var k in contents) {
         var obj = contents[k],
             url = obj.get('url');
@@ -301,10 +302,13 @@ var Content = Parse.Object.extend("Content", {
         return built;
       }
 
-      return Parse.Object.saveAll(toSave).then(function(saved) {
-        return built;
-      });
+      return Content._finalizeFactory(toSave, built);
     });
+  },
+  _finalizeFactory: function(toSave, built) {
+    return Parse.Object.saveAll(toSave).then(function(saved) {
+      return built;
+    });    
   },
   //
   // Build a Content object, generically

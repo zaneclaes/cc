@@ -19,7 +19,7 @@ var Delta = Parse.Object.extend("Delta", {
         sourceIds = self.get('sourceIds');
     if (!sourceIds || sourceIds.length <= 0) {
       // With no sources attached, just query from all contentSources.
-      return self.fetchDynamic([], stream, options);
+      return Parse.Promise.as([]);
     }
     this.stream = stream;
     query.containedIn('objectId',sourceIds);
@@ -39,7 +39,7 @@ var Delta = Parse.Object.extend("Delta", {
         }
       }
       var promises = [Parse.Promise.as([]), Parse.Promise.as([])];
-      if (dynamicSources.length > 0 || (dynamicSources.length == 0 && staticSources.length == 0)) {
+      if (dynamicSources.length > 0) {
         promises[0] = self.fetchDynamic(dynamicSources, stream, options);
       }
       if (staticSources.length > 0) {

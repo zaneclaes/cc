@@ -1,5 +1,6 @@
 var isLocal = typeof __dirname !== 'undefined',
     root = isLocal ? './' : 'cloud/',
+    fs = require('fs'),
     Analyzer = require('cloud/libs/Analyzer'),
     CCObject = require('cloud/libs/CCObject'),
     Content = require('cloud/Content').Content,
@@ -37,7 +38,7 @@ exports.onError = function(req, res) {
  * API
  ***************************************************************************************/
 
-function apiMiddleware(req, res, next) {
+function deltasMiddleware(req, res, next) {
 	var vparts = req.url.match(apiRegex),
 			vstr = vparts && vparts.length > 0 ? vparts[0] : '/v1/';
 	req.apiVersion = parseInt(vstr.substring(2));
@@ -46,8 +47,6 @@ function apiMiddleware(req, res, next) {
 }
 
 function registerAPI() {
-	app.use(apiMiddleware);
-
 	// GET /streams/:id
   var getStreamsId = apiRegex+'streams/'+canonicalNameRegex+'\.(rss|html|json)'+queryParamRegex+'$';
 	app.get(getStreamsId, function(req, res) {
@@ -189,9 +188,43 @@ function renderWebpage(page, req, res) {
     render();
   }
 }
+
+// Ex: we're accessing /about/xyz
+// Will try to load views/about/xyz.jade
+// if doesn't exist, use views/about/index.jade
+// Then render it using views/about.jade
+function renderSubPage(req, res) {
+  var parts = req.url.split('/'),
+      dir = parts[1],
+      page = parts[2],
+      exists = fs.existsSync('cloud/views/'+dir+'/'+page+'.jade');
+  page = exists ? page : 'index';
+
+  res.render(dir+'/'+page+'.jade', req.vars, function(err, html) {
+    match = html ? html.match(/<h1>(.*)<\/h1>/i) : [];
+    if (match && match.length >= 2) {
+      req.vars.title = match[1];
+    }
+    req.vars[dir] = html;
+    renderWebpage('about',req,res);
+  });
+}
 /***************************************************************************************
  * WEB MIDDLEWARE
  ***************************************************************************************/
+function allowCrossDomain(req, res, next) {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+  // intercept OPTIONS method
+  if ('OPTIONS' == req.method) {
+    res.send(200);
+  }
+  else {
+    next();
+  }
+}
 /**
  * Middleware
  * Knows that /stream_items/123 => Query("StreamItem").id == 123
@@ -453,6 +486,12 @@ function registerWeb() {
   app.get('/streams/'+objectIdRegex, requireLogin, function(req, res) {
     renderWebpage('stream', req, res);
   });
+  app.post('/streams/'+objectIdRegex, requireLogin, function(req, res) {
+    req.stream.set('name',req.body.name);
+    req.stream.save().then(function() {
+      res.redirect(req.url);// Back into the GET endpoint.
+    }, exports.onError(req, res));
+  });
   app.get('/streams/'+objectIdRegex+'/deltas', requireLogin, function(req, res) {
     res.render('deltas.jade', req.vars);
   });
@@ -463,8 +502,7 @@ function registerWeb() {
   app.post('/deltas', requireLogin, requireBodyParams(['streamId','name']), function(req, res) {
     var stream = req.streamMap[req.body.streamId];
     if (!stream) {
-      renderWebpage('404', req, res);
-      return;
+      return renderWebpage('404', req, res);
     }
     var delta = new Delta();
     delta.set('streamId',stream.id);
@@ -472,6 +510,30 @@ function registerWeb() {
     delta.save().then(function(d) {
       res.redirect('/streams/'+req.body.streamId+'#delta-'+d.id);
     }, exports.onError(req, res));
+  });
+  app.post('/deltas/'+objectIdRegex, requireLogin, requireBodyParams(['streamId','name']), restfulObjectLookup(), function(req, res) {
+    req.delta.set('name',req.body.name);
+    req.delta.save().then(function() {      
+      res.redirect('/streams/'+req.body.streamId+'#delta-'+req.delta.id);
+    }, exports.onError(req, res));
+  });
+  // Forks
+  app.post('/forks', requireLogin, requireBodyParams(['streamId','deltaId','forkId']), function(req, res) {
+    // We could validate the forkId here... but fuck it. Assume it's good.
+    var delta = req.deltaMap[req.body.deltaId];
+    if (!delta) {
+      return renderWebpage('404', req, res);
+    }
+    var forkIds = delta.get('forkIds') || [],
+        onDone = function() {
+          res.redirect('/streams/'+req.body.streamId+'#delta-'+delta.id);
+        };
+    if (forkIds.indexOf(req.body.forkId) >= 0) {
+      return onDone();
+    }
+    forkIds.push(req.body.forkId);
+    delta.set('forkIds',forkIds);
+    delta.save().then(onDone, exports.onError(req, res));
   });
   // Sources
   var sourceParams = ['deltaId','streamId','type','settings','name'];
@@ -518,7 +580,7 @@ function registerWeb() {
       'params' : params,
       //'payload' : lastEntry,
     };
-    Content.factory(map).then(function() {
+    Content.factory(map, source).then(function() {
       res.redirect('/streams/'+req.body.streamId+'#source-'+source.id);      
     }, exports.onError(req, res));
   });
@@ -591,6 +653,9 @@ function registerWeb() {
     }, exports.onError(req, res));
   });
 
+  // About renderer
+  app.get('/about/[a-zA-Z0-9\-]+', renderSubPage);
+
   // Generic Page Renderer
   var titleMap = {
         index: "Surface What's Good",
@@ -629,6 +694,9 @@ exports.listen = function() {
   app.use(express.bodyParser());
   app.use(express.cookieParser('298oeuhd91hrajoe89g1234h9k09812'));
   app.use(parseExpressCookieSession({ cookie: { maxAge: 14400000 } }));
+  app.use(allowCrossDomain);
+  app.use(deltasMiddleware); // Assign Jade vars, API vars, etc.
+
   registerAPI();
 	registerWeb();
 	app.listen();

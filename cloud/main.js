@@ -29,7 +29,7 @@ Parse.Cloud.define("stream", function(request, response) {
 	Stream.find(request.params).then(function(s) {
     return s.present();
   }).then(function(json) {
-    response.success(json.items);
+    response.success(json);
   }, Router.onError(request, response));
 });
 

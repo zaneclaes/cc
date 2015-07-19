@@ -1,0 +1,14 @@
+.deltas ul {
+  padding: 0;
+}
+.deltas-item {
+  list-style: none;
+  border: 1px solid #ccc;
+  padding: 0;
+}
+.deltas-item img {
+  max-width: 100%;
+}
+.deltas-content {
+  padding: 10px;
+}

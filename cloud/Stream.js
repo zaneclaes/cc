@@ -18,6 +18,9 @@ var Stream = Parse.Object.extend("Stream", {
     if (!popDate) {
       this.set('populatedAt', new Date((new Date()).getTime() - 1000 * 60 * 60 * 24));
     }
+    if (!this.get('presentedAt')) {
+      this.set('presentedAt', new Date());
+    }
     return this._generateCanonicalName(CCObject.canonicalName(this.get('name'))).then(function(cn) {
       self.set('canonicalName',cn);
       return true; //self.populate();
@@ -26,6 +29,9 @@ var Stream = Parse.Object.extend("Stream", {
 
   // Ensure uniqueness beforesave...
   _generateCanonicalName: function(cn) {
+    if (this.get('canonicalName')) {
+      return Parse.Promise.as(this.get('canonicalName'));
+    }
     var self = this,
         q = new Parse.Query(Stream);
     q.equalTo('canonicalName',cn);
@@ -48,7 +54,7 @@ var Stream = Parse.Object.extend("Stream", {
   present: function(options) {
     var self = this;
     options = JSON.parse(JSON.stringify(options || {}));
-    options.limit = options.limit || this.inferFetchLimit();
+    options.limit = parseInt(options.limit) || 20;
     options.offset = options.offset || 0;
     options.format = options.format || 'json';
     options.order = options.order || 'scheduledAt';
@@ -70,7 +76,7 @@ var Stream = Parse.Object.extend("Stream", {
         scrub = ['populationIndex','populatedAt','presentedAt','user'],
         template = this.get('template') || {
           before : '<div class="deltas"><ul class="deltas-items">',
-          item : '<li class="deltas-item"><img src="#{imageUrl}" /><h3><a href="#{url}" target="_blank">#{title}</a></h3><p>#{text}</p></li>',
+          item : '<li class="deltas-item"><img src="#{imageUrl}" /><div class="deltas-content"><h3><a href="#{url}" target="_blank">#{title}</a></h3><p>#{text}</p></div></li>',
           after : '</ul></div>',
         },
         out = null;
@@ -93,34 +99,23 @@ var Stream = Parse.Object.extend("Stream", {
     query.limit(options.limit);
     query.skip(options.offset);
     query[options.direction](options.order);
-
     return query.find().then(Stream.dedupe).then(function(items) {
-      return options.order === 'scheduledAt' ? self.schedule(items) : Parse.Promise.as(items);
-    }).then(function(items) {
       if (options.format === 'html') {
         for (var i in items) {
           var item = items[i],
-              images = item.get('images'),
               html = JSON.parse( JSON.stringify( template.item ) ),
-              map = {
-                title : item.get('title'),
-                text : item.get('text'),
-                url : item.get('url'),
-                host : item.get('host'),
-                id : item.id,
-                scheduledAt : (item.get('scheduledAt') || new Date()).toUTCString(),
-                imageUrl : images && images.length > 0 ? images[0].url : '',
-              };
+              map = item.present(options);
           for (var k in map) {
             html = html.replace('#{' + k + '}', map[k]);
           }
+          html = html.replace('<img src="" />', ''); // No image? Strip that part.
           out += html;
         }
         out += template.after;
       }
       else if (options.format === 'rss') {
-        var item = items.length > 0 ? items[0] : false,
-            desc = item ? item.get('title') : self.get('description');
+        var firstItem = items.length > 0 ? items[0] : false,
+            desc = firstItem ? firstItem.get('title') : self.get('description');
 
         out.startElement('rss').writeAttribute('version','2.0').
                                 writeAttribute('xmlns:atom','http://www.w3.org/2005/Atom');
@@ -135,28 +130,25 @@ var Stream = Parse.Object.extend("Stream", {
 
         for (var i in items) {
           var item = items[i],
-              desc = item.get('text'),
+              map = item.present(options),
+              desc = map.text,
               images = item.get('images');
           out.startElement('item');
-          out.startElement('title').text(item.get('title')).endElement();
-          out.startElement('link').text(item.get('url')).endElement();
+          out.startElement('title').text(map.title).endElement();
+          out.startElement('link').text(map.url).endElement();
           //out.startElement('author').text(item.get('host')).endElement();
-          out.startElement('guid').writeAttribute('isPermaLink','false').text(item.id).endElement();
-          out.startElement('pubDate').text((item.get('scheduledAt') || new Date()).toUTCString()).endElement();
-          if (images && images.length > 0) {
-           // var imgUrl = (images[0].url.indexOf('//') === 0 ? 'http:' : '') + images[0].url;
-            var imgUrl = 'http://www.deltas.io/api/v1/stream_items/' + item.id + '/image?width=240';
+          out.startElement('guid').writeAttribute('isPermaLink','false').text(map.id).endElement();
+          out.startElement('pubDate').text(map.scheduledAt).endElement();
+          if (options.thumbnail && images && images.length > 0) {
+            // Embed a resized thumbnail at the end of the feed
+            var width = Math.max(parseInt(options.thumbnail), 240);
+            var imgUrl = 'http://www.deltas.io/api/v1/stream_items/' + map.id + '/image?width='+width;
             out.startElement('enclosure').writeAttribute('type','image/jpeg').
                                           writeAttribute('url',imgUrl).
-                                          endElement();
-            desc = '<center><a href="' + item.get('url') + '" ><img src="' + imgUrl + '" /></a></center><br />'+desc;
-          }
-
-          if (options.paragraphs) {
-            desc = desc.split('</p>').slice(0, parseInt(options.paragraphs)).join('</p>');
-          }
-          
-          out.startElement('description').text(desc).endElement();
+                                            endElement();
+              desc = '<center><a href="' + map.url + '" ><img src="' + imgUrl + '" /></a></center><br />'+desc;
+            }          
+            out.startElement('description').text(desc).endElement();
           out.endElement();
         }
         out.endDocument();
@@ -167,7 +159,7 @@ var Stream = Parse.Object.extend("Stream", {
         for (var i in items) {
           json.push(items[i].present());
         }
-        out.items = JSON.parse(JSON.stringify( items ));
+        out.items = JSON.parse(JSON.stringify( json ));
       }
       return out;
     });
@@ -176,12 +168,29 @@ var Stream = Parse.Object.extend("Stream", {
    * Loops through stream_items and pegs them to the scheduling rules
    */
   schedule: function(items) {
-    if (!items || items.length <= 0) {
+    if (!items) {
+      var self = this,
+          query = new Parse.Query(StreamItem);
+      query.equalTo('stream',self);
+      query.greaterThan('scheduledAt',new Date());
+      query.ascending('scheduledAt');
+      return query.find().then(function(items) {
+        return self._schedule(items);
+      });
+    }
+    else if (items && items.length <= 0) {
       return Parse.Promise.as([]);
     }
+    else {
+      return this._schedule(items);
+    }
+  },
+  _schedule: function(items) {
     // Sort the items in ascending scheduled order
     items = items.sort(function(a, b){
-      return a.get('scheduledAt').getTime() - b.get('scheduledAt').getTime();
+      aT = a.has('scheduledAt') ? a.get('scheduledAt').getTime() : 0;
+      bT = b.has('scheduledAt') ? b.get('scheduledAt').getTime() : 0;
+      return aT - bT;
     });
     var spacing = this.get('spacing') || (1000 * 60 * 60 * 4),
         randomization = this.get('randomization') || (1000 * 60 * 60),
@@ -194,7 +203,7 @@ var Stream = Parse.Object.extend("Stream", {
           nextTime = lastTime + spacing + rand,
           minTime = lastTime + spacing - randomization / 2,
           maxTime = lastTime + spacing + randomization / 2,
-          curTime = item.get('scheduledAt').getTime();
+          curTime = item && item.has('scheduledAt') ? item.get('scheduledAt').getTime() : 0;
 
       if (curTime < minTime || curTime > maxTime) {
         // Was not in the acceptable zone for scheduling
@@ -223,6 +232,9 @@ var Stream = Parse.Object.extend("Stream", {
         options.startDate = item.createdAt;
       }
       return self.fetchDeltas(options);
+    }).then(function(items) {
+      allItems = CCObject.arrayUnion(allItems, items);
+      return self.schedule(allItems);
     });
   },
   /**
@@ -242,14 +254,17 @@ var Stream = Parse.Object.extend("Stream", {
         promises.push(deltas[d].fetch(self, options));
       }
       return Parse.Promise.when(promises);
+    }).then(function() {
+      var items = [];
+      for (var i in arguments) {
+        for (var j in arguments[i]) {
+          if (arguments[i][j]) {
+            items.push(arguments[i][j]);
+          }
+        }
+      }
+      return items;
     });
-  },
-  /**
-   * Max number of items to fetch at a time
-   * For now, this is just hardcoded, but it could be used for query timeout fixes
-   */
-  inferFetchLimit: function() {
-    return 20;
   },
   /**
    * For items in the stream, update the click counts
@@ -291,7 +306,7 @@ var Stream = Parse.Object.extend("Stream", {
   // Internal: after present, dupes are an array of StreamItems that should be deleted.
   dedupe: function(items) {
     if (!items) {
-      return [];
+      return Parse.Promise.as([]);
     }
     var seen = [],
         dupes = [],
@@ -311,7 +326,7 @@ var Stream = Parse.Object.extend("Stream", {
     }
 
     if (dupes.length <= 0) {
-      return out;
+      return Parse.Promise.as(out);
     }
     CCObject.log('[Stream] de-duping x'+dupes.length,3);
     return Parse.Object.destroyAll(dupes).then(function(){
@@ -323,6 +338,10 @@ var Stream = Parse.Object.extend("Stream", {
    * Then, reschedule their times
    */
   schedule: function(items) {
+    if (!items || items.length <= 0) {
+      return Parse.Promise.as([]);
+    }
+
     var mapped = {},
         streams = {},
         promises = [];

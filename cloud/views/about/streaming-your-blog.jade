@@ -1,0 +1,32 @@
+h1 Streaming your Blog
+hr
+.row
+  .col-md-5.pull-right
+    .deltas(data-stream="lbe-blog-updates",data-paragraphs="3",data-limit="2",data-noframes="true")
+      p Loading...
+    script(src="https://www.deltas.io/dist/js/deltas.io.js")
+  .col-md-7
+    h2 Automatically Add Content
+    p We have only just scratched the surface of what streams can do. In this article, you'll create your first dynamic stream. This means that content is automatically added to your stream, instead of requiring that you manually add each link. To the right, you can see the stream for my personal blog over at 
+      a(href="http://LifeByExperimentation.com") LifeByExperimentation.com
+      | . Whenever I publish a new post on my blog, it'll show up in this stream.
+    p To automatically add your blog content to a stream, you'll create another "New Source." Paste the URL for your RSS feed in the "Query" section, and then choose "RSS Content" when you press the Add Source button.
+    h2 Tracking and Customization
+    p You can even customize this stream using integration options. In this example, I'm including only the most recent 2 posts, with 3 paragraphs from each post. My embed code looks like this:
+    code &lt;div class="deltas" data-stream="lbe-blog-updates" data-paragraphs="3" data-limit="2" /&gt;
+    p If you mouse over the links in the stream to the right, you'll notice that they're actually Bit.ly links. This means that no matter where I use this stream, it's automatically tracking performance (clicks). I did this by using a "Fork." When looking at your Delta, just press the "Add a Fork" button and choose "Bit.ly". Once the bitly fork is added, new content in the stream will automatically be shortened with the bit.ly link shortener and performance will be tracked.
+    h2 Case Study: Sending Digest Emails
+    p So far, we've seen how you can embed a stream into a blog, but embedding a stream isn't the only way to use Deltas.io. You can also use a stream as an automatic feed for other things, like a "digest email" to your readers. To do this, instead of using the embedding features, we'll grab the RSS URL from the "Integration" tab on the stream and use that to configure a RSS campaign in Mailchimp. For example, my RSS URL is:
+    code http://www.deltas.io/api/v1/streams/lbe-blog-updates.rss
+    p For my digest email, I wanted to send only the first 3 paragraphs for each post. This way, the email is kept short and readers are encouraged to click onto my site. I also wanted to include a thumnail inside the post, since images tend to increase engagement. So the RSS URL I used to set up my campaign, based on these integration parameters, is:
+    code http://www.deltas.io/api/v1/streams/lbe-blog-updates.rss?paragraphs=3&thumbnail=240
+    p I use this stream to automatically send a weekly update to my readers with the new stuff from the blog. I used the 
+      a(href="http://kb.mailchimp.com/campaigns/rss-in-campaigns/create-an-rss-driven-campaign",target="_blank") Mailchimp instructions to create a RSS campaign 
+      | which is sent every week at 8pm on Sunday nights. I set the "subject" of the email to the 
+      b *|RSSFEED:DESCRIPTION|*
+      | merge tag. This means that each time the email is sent, it uses the title of the latest blog post as the subject of the email. As a result, unlike most Mailchimp RSS campaigns, my campaign has a different subject each time (based on the latest blog post).
+      p In summary, my digest emails have a good subject line, nicely formatted thumbnail images, a short preview of the content, a link to the blog post, and automatic performance tracking.
+    h2 Next Up: Sharing Interesting Links
+    p That's not all Deltas.io can do! Next, we'll look at how you can automatically grow your audience on social media by using Deltas to share interesting things. 
+      a(href="sharing-interesting-links") Keep reading.
+      | ...

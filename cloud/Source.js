@@ -123,7 +123,7 @@ var Source = Parse.Object.extend("Source", {
 					//'payload' : lastItem,
 				};
 			}
-			return Content.factory(contentMap, options);
+			return Content.factory(contentMap, options.source);
 		});
 	},
 	twitter: function(options) {
@@ -172,7 +172,7 @@ var Source = Parse.Object.extend("Source", {
 			}
 			CCObject.log('got prismatic content map page '+curPage+' from sourceId '+sourceId);
 			CCObject.log(contentMap);
-			return Content.factory(contentMap, options);*/
+			return Content.factory(contentMap, options.source);*/
 		});
 	},
 	/**
@@ -228,7 +228,7 @@ var Source = Parse.Object.extend("Source", {
 			}
 			CCObject.log('got prismatic content map page '+curPage+' from sourceId '+sourceId);
 			CCObject.log(contentMap);
-			return Content.factory(contentMap, options);
+			return Content.factory(contentMap, options.source);
 		});
 	},
 	/**
@@ -290,7 +290,7 @@ var Source = Parse.Object.extend("Source", {
 	        //'payload' : lastEntry,
 	      };
 	    }
-	    return Content.factory(contentMap, options);
+	    return Content.factory(contentMap, options.source);
 	  });
 	},
 	/**

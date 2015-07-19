@@ -1,6 +1,9 @@
-h2 
-  span.fa.fa-filter.fa-fw
-  | Delta: #{delta.name}
+form.editable#changeDeltaName(method="POST",action="#{root}/deltas/#{delta.objectId}")
+  h2.clickable(data-form="changeDeltaName")
+    span.fa.fa-fw.fa-filter
+    span #{delta.name}
+  input.form-control(type='text', placeholder='Delta Name',name='name')
+  input(type='hidden',name='streamId',value='#{stream.objectId}')
 .row
   .col-md-5.pull-left
     h2 

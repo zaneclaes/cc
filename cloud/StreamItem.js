@@ -12,9 +12,28 @@ var StreamItem = Parse.Object.extend("StreamItem", {
    * Then delete extra data that we don't want to send down
    * (trim the pipe bandwidth)
    */
-  present: function() {
-    return CCObject.scrubJSON(this, ['holdDate','operations','relationship','status','delta','stream',
-                                     'publisher','pendingForkIds','forkResults','contentScore','content']);
+  present: function(options) {
+    options = options || {};
+    var images = this.get('images'),
+        text = this.get('text') || '';
+    if (options.paragraphs) {
+      text = text.split('</p>').slice(0, parseInt(options.paragraphs)).join('</p>');
+    }
+    if (options.noframes) {
+      text = text.replace(/<iframe.+?<\/iframe>/g, '');
+    }
+    return {
+      title : this.get('title'),
+      text : text,
+      url : this.get('url'),
+      host : this.get('host'),
+      id : this.id,
+      scheduledAt : (this.get('scheduledAt') || new Date()).toUTCString(),
+      imageUrl : images && images.length > 0 ? images[0].url : '',
+    };
+    //return CCObject.scrubJSON(this, ['holdDate','operations','relationship','status','thumbnails',
+    //                                 'publisher','pendingForkIds','forkResults','contentScore',
+    //                                 'content','stream','source','delta','updatedAt']);
   },
 	/**
 	 * Before Save

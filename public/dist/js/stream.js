@@ -76,4 +76,17 @@ $(function(){
     loadHash(this.hash);
   });
   $('code').OneClickSelect();
+
+  // Enable editable
+  $('form.editable .clickable').click(function() {
+    var form = $('#'+$(this).data('form'));
+    form.children('input').first().val($(this).text()).show().focus();
+    $(this).hide();
+  });
+  // Disable editable
+  $('form.editable input').blur(function() {
+    var form = $(this).parent('form.editable').first();
+    form.children('.clickable').show();
+    $(this).hide();
+  });
 });
