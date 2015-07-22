@@ -2,6 +2,8 @@ var CCObject = require('cloud/libs/CCObject'),
     Content = require('cloud/Content').Content,
     Delta = require('cloud/Delta').Delta,
     StreamItem = require('cloud/StreamItem').StreamItem,
+    fs = require('fs'),
+    jade = require('jade'),
     XMLWriter = require('cloud/libs/XMLWriter');
 
 /**
@@ -53,7 +55,8 @@ var Stream = Parse.Object.extend("Stream", {
    */
   present: function(options) {
     var self = this;
-    options = JSON.parse(JSON.stringify(options || {}));
+    options = options || {};
+    //options = JSON.parse(JSON.stringify(options || {}));
     options.limit = parseInt(options.limit) || 20;
     options.offset = options.offset || 0;
     options.format = options.format || 'json';
@@ -74,14 +77,10 @@ var Stream = Parse.Object.extend("Stream", {
         query = new Parse.Query(StreamItem),
         now = (new Date()).getTime(),
         scrub = ['populationIndex','populatedAt','presentedAt','user'],
-        template = this.get('template') || {
-          before : '<div class="deltas"><ul class="deltas-items">',
-          item : '<li class="deltas-item"><img src="#{imageUrl}" /><div class="deltas-content"><h3><a href="#{url}" target="_blank">#{title}</a></h3><p>#{text}</p></div></li>',
-          after : '</ul></div>',
-        },
+        template = options.template || this.get('template'),
         out = null;
     if (options.format === 'html') {
-      out = '<div class="deltas"><ul>';
+      // This will become a jade render promise chain, later.
     }
     else if (options.format === 'rss') {
       out = new XMLWriter();
@@ -95,23 +94,34 @@ var Stream = Parse.Object.extend("Stream", {
     if (options.age) {
       query.greaterThan('scheduledAt', new Date(now - options.age));
     }
+    
     query.containedIn('status',statuses);
     query.limit(options.limit);
     query.skip(options.offset);
     query[options.direction](options.order);
     return query.find().then(Stream.dedupe).then(function(items) {
       if (options.format === 'html') {
+        var itemVars = []
+            fnJade = 'cloud/views/templates/'+(template || 'default')+'.jade',
+            exists = fs.existsSync(fnJade),
+            contents = exists ? fs.readFileSync(fnJade) : false,
+            jadeVars = options.jadeVars || {};
+
+        jadeVars.items = [];
+        jadeVars.stream = JSON.parse( JSON.stringify( self ) );
+
+        if (!contents) {
+          throw new Error('Template not found');
+        }
+        
         for (var i in items) {
           var item = items[i],
-              html = JSON.parse( JSON.stringify( template.item ) ),
-              map = item.present(options);
-          for (var k in map) {
-            html = html.replace('#{' + k + '}', map[k]);
-          }
-          html = html.replace('<img src="" />', ''); // No image? Strip that part.
-          out += html;
+              variableMap = item.present(options);
+          jadeVars.items.push(variableMap);
         }
-        out += template.after;
+        // Running Jade Version 0.27.6 , no compileFile()
+        // 2nd param is options, if necessary.
+        return jade.compile(contents, {})(jadeVars);
       }
       else if (options.format === 'rss') {
         var firstItem = items.length > 0 ? items[0] : false,
@@ -205,7 +215,7 @@ var Stream = Parse.Object.extend("Stream", {
           maxTime = lastTime + spacing + randomization / 2,
           curTime = item && item.has('scheduledAt') ? item.get('scheduledAt').getTime() : 0;
 
-      if (curTime < minTime || curTime > maxTime) {
+      if (item && (curTime < minTime || curTime > maxTime)) {
         // Was not in the acceptable zone for scheduling
         item.set('scheduledAt',new Date(nextTime));
         changed = true;

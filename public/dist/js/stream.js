@@ -17,11 +17,11 @@ function loadHash(hash) {
         container.load('/streams/'+streamId+'/'+h, restoreClass);
       };
   if (hash === '#preview') {
-    container.empty();
+    $('#stream-preview').empty();
     $('body').scrollTop();
     icon.removeClass(iconClass).addClass("fa-circle-o-notch fa-spin");
-    $.get('/api/v1/streams/' + streamCn + '.html', function( data ) {
-      container.html(data);
+    $.get('/api/v1/streams/' + streamCn + '.html?template=manage', function( data ) {
+      $('#stream-preview').html(data);
       restoreClass();
     });
   } else if(hash.indexOf('#delta-') === 0 || hash.indexOf('#source-') === 0 || hash.indexOf('#fork-') === 0) {
@@ -79,14 +79,18 @@ $(function(){
 
   // Enable editable
   $('form.editable .clickable').click(function() {
-    var form = $('#'+$(this).data('form'));
-    form.children('input').first().val($(this).text()).show().focus();
-    $(this).hide();
+    var form = $(this).parent('form.editable').first();
+    form.children('input, button, textarea').show();
+    form.children('.clickable').hide();
   });
   // Disable editable
   $('form.editable input').blur(function() {
-    var form = $(this).parent('form.editable').first();
-    form.children('.clickable').show();
-    $(this).hide();
+    var form = $(this).parent('form.editable').first(),
+        buttons = form.children('button');
+    if (buttons.length === 0) {
+      // Don't hide if there's a submit button.
+      form.children('.clickable').show();
+      form.children('input, button, textarea').hide();
+    }
   });
 });

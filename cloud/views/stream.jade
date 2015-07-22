@@ -1,8 +1,8 @@
 .container
   .row-fluid
     .span12.top
-      form.editable#changeStreamName(method="POST",action="#{root}/streams/#{stream.objectId}")
-        h1.clickable(data-form="changeStreamName")
+      form.editable(method="POST",action="#{root}/streams/#{stream.objectId}")
+        h1.clickable
           span.fa.fa-fw.fa-rss
           span #{stream.name}
         input.form-control(type='text', placeholder='Stream Name',name='name')
@@ -43,6 +43,10 @@
               .source(id="fork-#{fork.objectId}")
                 include ./fork.jade
           .tab-pane(id="preview")
+            center
+              h2 Your Embeddable Stream:
+            hr
+            #stream-preview
           .tab-pane(id="integration")
             h2 Embed This Stream
             ul

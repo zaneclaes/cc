@@ -117,6 +117,31 @@ Parse.Cloud.job("updateClicks", function(req, status) {
   }, Router.onError(req, status));
 });
 
+Parse.Cloud.job("dedupeContent", function(req, status) {
+  var query = new Parse.Query(Content),
+      seenUrls = {},
+      toDelete = [];
+  query.descending('createdAt');
+  query.limit(1000);
+  query.skip(req.params.skip || 0);
+  query.find().then(function(contents) {
+    for (var c in contents) {
+      var url = contents[c].get('url'),
+          sId = contents[c].get('source').id;
+      seenUrls[sId] = seenUrls[sId] || [];
+      if (seenUrls[sId].indexOf(url) >= 0) {
+        toDelete.push(contents[c]);
+      }
+      else {
+        seenUrls[sId].push(url);
+      }
+    }
+    return Parse.Object.destroyAll(toDelete);
+  }).then(function() {
+    status.success("Deleted "+toDelete.length+" dupes");
+  }, Router.onError(req, status));
+});
+
 function onBeforeSaveSuccess(res) {
   // Throw out obj, beforeSave can't handle it.
   return function(obj) {

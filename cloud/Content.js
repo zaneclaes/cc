@@ -151,6 +151,23 @@ var Content = Parse.Object.extend("Content", {
         lastAnalysis = self.get('lastAnalysis'),
         hasBeenAnalyzed = lastAnalysis ? true : false; // If it hasn't been analyzed, let's just get it into the DB
 
+    // If new, ensure it's unique...
+    if (!this.id) {
+      var query = new Parse.Query(Content);
+      query.equalTo('url',this.get('url'));
+      query.equalTo('source',this.get('source'));
+      promises.push(query.find().then(function(items){
+        if (!items || items.length === 0) {
+          return true;
+        }
+        console.log('~~DESTROYING~~'+items.length+' items...');
+        // Destroy all the existing items =/
+        return Parse.Object.destroyAll(items).then(function(){
+          return true;
+        });
+      }));
+    }
+
     // Get Headline score
     if (parseInt(this.get('headlineScore') || 0) <= 0) {
       log += 'headline, ';
@@ -275,6 +292,7 @@ var Content = Parse.Object.extend("Content", {
     var query = new Parse.Query(Content);
     query.containedIn("url", urls);
     query.equalTo('source',source);
+    query.limit(1000);
     return query.find().then(function(contents) {
       //CCObject.log('found content matches: '+contents.length);
       for (var k in contents) {

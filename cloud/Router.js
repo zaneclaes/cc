@@ -1,6 +1,7 @@
 var isLocal = typeof __dirname !== 'undefined',
     root = isLocal ? './' : 'cloud/',
     fs = require('fs'),
+    jade = require('jade'),
     Analyzer = require('cloud/libs/Analyzer'),
     CCObject = require('cloud/libs/CCObject'),
     Content = require('cloud/Content').Content,
@@ -29,7 +30,7 @@ exports.onError = function(req, res) {
       res.json({'error' : error});
     }
     else {
-      res.error(error);
+      res.error(error ? JSON.stringify(error) : '?');
     }
   };
 }
@@ -58,10 +59,14 @@ function registerAPI() {
         
 		req.query.canonicalName = end[0];
 		Stream.find(req.query).then(function(s) {
+      if (!s) {
+        throw new Error("Stream not found");
+      }
       var params = JSON.parse( JSON.stringify( req.query ) );
       params.format = format;
       params.url = req.url;
       params.link = root + req.url;
+      params.jadeVars = getJadeVariables();
       return s.present(params);
     }).then(function(obj) {
       if (format === 'json') {
@@ -413,7 +418,7 @@ function requireLogin(req, res, next) {
       }
       if (staticSources.length > 0) {
         qc = new Parse.Query(Content);
-        qc.containedIn('source', sources);
+        qc.containedIn('source', staticSources);
         qc.descending('createdAt');
       }
     } 
@@ -559,30 +564,56 @@ function registerWeb() {
     }, exports.onError(req, res));
   });
   // Create static content
-  var contentsParams = ['streamId','sourceId','title','text','link','image','tags','params'];
+  var contentsParams = ['streamId','sourceId','title','text','link','image','tags','params'],
+      createContentMap = function(req, source) {
+        if (!source) {
+          renderWebpage('404', req, res);
+          return false;
+        }
+        var img = req.body.image.length ? { url : req.body.image } : null,
+            params = req.body.params.indexOf('{') === 0 ? JSON.parse(req.body.params) : {},
+            map = {};
+        map[req.body.link] = {
+          'source' : source,
+          'weight' : source.get('weight') || 1,
+          'title' : req.body['title'],
+          'text' : req.body['text'],
+          'tags' : req.body['tags'].split(','),
+          'images' : img ? [img] : [],
+          'timestamp' : new Date().getTime(),
+          'params' : params,
+          //'payload' : lastEntry,
+        };
+        return map;
+      };
   app.post('/contents', requireLogin, requireBodyParams(contentsParams), function(req, res) {
-    var source = req.sourcesMap[req.body.sourceId];
-    if (!source) {
-      renderWebpage('404', req, res);
+    var source = req.sourcesMap[req.body.sourceId],
+        map = createContentMap(req, source);
+    if (!map) {
       return;
     }
-    var img = req.body.image.length ? { url : req.body.image } : null,
-        params = req.body.params.indexOf('{') === 0 ? JSON.parse(req.body.params) : {},
-        map = {};
-    map[req.body.link] = {
-      'source' : source,
-      'weight' : source.get('weight') || 1,
-      'title' : req.body['title'],
-      'text' : req.body['text'],
-      'tags' : req.body['tags'].split(','),
-      'images' : img ? [img] : [],
-      'timestamp' : new Date().getTime(),
-      'params' : params,
-      //'payload' : lastEntry,
-    };
     Content.factory(map, source).then(function() {
       res.redirect('/streams/'+req.body.streamId+'#source-'+source.id);      
     }, exports.onError(req, res));
+  });
+  app.post('/contents/'+objectIdRegex, requireLogin, requireBodyParams(contentsParams), restfulObjectLookup(), function(req, res) {    
+    var source = req.sourcesMap[req.body.sourceId],
+        map = createContentMap(req, source);
+    if (!map) {
+      return;
+    }
+    console.log(map);
+    console.log(Object.keys(map));
+    var url = Object.keys(map)[0];
+    console.log(url);
+    map = map[url];
+    map[url] = url;
+    for (var k in map) {
+      req.content.set(k, map[k]);
+    }
+    req.content.save().then(function() {
+      res.redirect('/streams/'+req.body.streamId+'#source-'+source.id);  
+    });
   });
   // Modify a stream item
   app.post('/stream_items/'+objectIdRegex, requireLogin, restfulObjectLookup(function(query) {
@@ -591,7 +622,8 @@ function registerWeb() {
     var params = Object.keys(req.body),
         stream = req.stream_item ? req.stream_item.get('stream') : false,
         accepted = params.indexOf('accept') >= 0,
-        rejected = params.indexOf('reject') >= 0;
+        rejected = params.indexOf('reject') >= 0,
+        deleted = params.indexOf('delete') >= 0;
 
     if (!stream || stream.get('user').id !== Parse.User.current().id) {
       renderWebpage('404', req, res);
@@ -600,6 +632,11 @@ function registerWeb() {
       req.stream_item.set('status',status);
       req.stream_item.save().then(function(obj) {
         res.redirect('/scheduled');
+      }, exports.onError(req, res));
+    } else if (deleted) {   
+      var streamId = req.stream_item.get('stream').id;   
+      req.stream_item.destroy().then(function(obj) {
+        res.redirect('/streams/'+streamId+'#preview');
       }, exports.onError(req, res));
     } else {
       // NOP
@@ -687,7 +724,7 @@ function registerWeb() {
  ***************************************************************************************/
 exports.listen = function() {
 	app = express();
-  app.engine('jade', require('jade').__express);
+  app.engine('jade', jade.__express);
   app.engine('ejs', require('ejs').__express);
   app.set('views', 'cloud/views');
   app.set('view engine','jade');

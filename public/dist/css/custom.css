@@ -64,7 +64,7 @@ a {
 form.editable .clickable {
   cursor: pointer;
 }
-form.editable input {
+form.editable button, form.editable textarea, form.editable input {
   display: none;
   margin-top: 20px;
   margin-bottom: 20px;

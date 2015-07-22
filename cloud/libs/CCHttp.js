@@ -33,19 +33,30 @@ exports.httpCachedRequest = function(options) {
           row.set('url', options.url);
         }
         if (obj) {
-          row.set('obj', obj);
+          row.set('obj', CCObject.sanitizeKeysForParseSave( obj ) );
         }
         if (typeof httpResponse === 'string') {
-          row.set('error', httpResponse);
+          row.set('error', CCObject.sanitizeKeysForParseSave( httpResponse ) );
           row.increment('errorCount');
         }
         else if (httpResponse) {
           row.set('errorCount', 0);
-          row.set('cookies', httpResponse.cookies);
-          row.set('headers', httpResponse.headers);
-          row.set('status', httpResponse.status);
+          // Causes save failures... doesn't seem to properly scrub nested keys (?)
+
+          //row.set('cookies', CCObject.sanitizeKeysForParseSave( httpResponse.cookies ) );
+          //row.set('headers', CCObject.sanitizeKeysForParseSave( httpResponse.headers ) );
+          //row.set('status', CCObject.sanitizeKeysForParseSave( httpResponse.status ) );
         }
-        return row.save();
+        return row.save().then(function(){ 
+          return true;
+        }, function(e) {
+          console.log('http caching error');
+          console.log(obj);
+          console.log(httpResponse);
+          console.log(e);
+          console.log('byte size http' + CCObject.byteSize(httpResponse));
+          console.log('byte size obj' + CCObject.byteSize(obj));
+        }); 
       },
   		row = null;
 
@@ -91,9 +102,9 @@ exports.httpCachedRequest = function(options) {
   }).then(function() {
     return row ? {
       obj: row.get('obj') || {},
-      cookies: row.get('cookies') || {},
-      headers: exports.normalizeKeys(row.get('headers') || {}),
-      status: row.get('status') || 0,
+      // cookies: row.get('cookies') || {},
+      // headers: exports.normalizeKeys(row.get('headers') || {}),
+      // status: row.get('status') || 0,
     } : false;
   });
 };
