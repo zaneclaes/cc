@@ -189,6 +189,7 @@ var Delta = Parse.Object.extend("Delta", {
     // Order, offset, etc.
     query.limit(limit);
     query.skip(offset);
+    log.push('offset='+offset+' ,limit='+limit+', order='+order+', dir='+direction)
     if (direction === 'ascending') {
       query.ascending(order);
     }

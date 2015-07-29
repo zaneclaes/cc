@@ -1,31 +1,31 @@
 h2 
   span.fa.fa-tint.fa-fw
-  | Source: #{source.name}
-ul.fa-ul
-  each content in staticcontents
-    -if (content.source.objectId == source.objectId)
-      li
-        form.editable(method="POST",action="#{root}/contents/#{content.objectId}")
-          h4
-            span.fa.fa-li.fa-link.clickable
-            a(href="#{content.url}",target="_blank") #{content.title}
-          code #{content.url}
-          p.clickable #{content.text}
-          input(type="hidden",name="contentId",value="#{content.objectId}")
-          input(type="hidden",name="streamId",value="#{stream.objectId}")
-          input(type="hidden",name="sourceId",value="#{source.objectId}")
-          input.form-control(type="text",name="title",value="#{content.title}")
-          textarea.form-control(type="text",name="text") #{content.text}
-          input.form-control(type='text', placeholder='Link',name='link',value="#{content.url}")
-          if (content.images.length)
-            input.form-control(type='text', placeholder='Image',name='image',value="#{content.images[0].url}")
-          else
-            input.form-control(type='text', placeholder='Image',name='image',value="")
-          input.form-control(type='text', placeholder='Tags',name='tags',value="#{content.tags}")
-          textarea.form-control(placeholder='Custom Params (JSON)',name='params') !{JSON.stringify(content.params)}
-          button.btn.btn-large.btn-success.pull-right(type='Submit') Save
-        hr
+  | #{source.name}
 -if (source.type === 'static')
+  ul.fa-ul
+    each content in static_contents
+      -if (content.source.objectId == source.objectId)
+        li
+          form.editable(method="POST",action="#{root}/contents/#{content.objectId}")
+            h4
+              span.fa.fa-li.fa-link.clickable
+              a(href="#{content.url}",target="_blank") #{content.title}
+            code #{content.url}
+            p.clickable !{content.text}
+            input(type="hidden",name="contentId",value="#{content.objectId}")
+            input(type="hidden",name="streamId",value="#{stream.objectId}")
+            input(type="hidden",name="sourceId",value="#{source.objectId}")
+            input.form-control(type="text",name="title",value="#{content.title}")
+            textarea.form-control(type="text",name="text") #{content.text}
+            input.form-control(type='text', placeholder='Link',name='link',value="#{content.url}")
+            if (content.images.length)
+              input.form-control(type='text', placeholder='Image',name='image',value="#{content.images[0].url}")
+            else
+              input.form-control(type='text', placeholder='Image',name='image',value="")
+            input.form-control(type='text', placeholder='Tags',name='tags',value="#{content.tags}")
+            textarea.form-control(placeholder='Custom Params (JSON)',name='params') !{JSON.stringify(content.params)}
+            button.btn.btn-large.btn-success.pull-right(type='Submit') Save
+          hr
   .container
     .col-md-5.col-md-offset-4
       .panel.panel-default.center
@@ -50,5 +50,12 @@ ul.fa-ul
               textarea.form-control(placeholder='Custom Params (JSON)',name='params')
             button.btn.btn-large.btn-success.pull-right(type='submit') Add Content
   // ./container 
--else
-  #{source.type}
+-else 
+  ul.fa-ul
+    each content in dynamic_contents
+      -if (content.source.objectId == source.objectId)
+        li
+          h4
+            span.fa.fa-li.fa-link.clickable
+            a(href="#{content.url}",target="_blank") #{content.title}
+          code #{content.url}

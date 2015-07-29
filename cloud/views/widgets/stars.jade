@@ -1,0 +1,8 @@
+span.stars
+  each s in [0, 1, 2, 3, 4]
+    - if (stars == (s + 0.5))
+      span.fa.fa-fw.fa-star-half-o
+    - else if (stars > s)
+      span.fa.fa-fw.fa-star
+    - else if (stars < s)
+      span.fa.fa-fw.fa-star-o

@@ -77,6 +77,13 @@ $(function(){
   });
   $('code').OneClickSelect();
 
+  $('.autosubmit li a').click(function() {
+    var form = $(this).parent().parent().parent().parent(),
+        val = $(this).attr('href').substr(1);
+    form.children('input').attr('value',val);
+    form.submit();
+  });
+
   // Enable editable
   $('form.editable .clickable').click(function() {
     var form = $(this).parent('form.editable').first();

@@ -12,3 +12,14 @@
 .deltas-content {
   padding: 10px;
 }
+.deltas .price {
+  font-size: large;
+  font-weight: bold;
+}
+.deltas .price.discounted {
+  text-decoration: line-through;
+  color: #aaa;
+}
+.deltas .stars {
+  color: #f6b900;
+}

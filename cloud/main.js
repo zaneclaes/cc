@@ -82,7 +82,7 @@ Parse.Cloud.job("analyze", function(request, status) {
 Parse.Cloud.job("populate", function(request, status) {
   var query = new Parse.Query(Stream),
       now = (new Date()).getTime(),
-      presDate = new Date(now - 1000 * 60 * 60), // anything we tried to present recently
+      presDate = new Date(now - Stream.ACTIVE_STREAM_AGE), // anything we tried to present recently
       popDate = new Date(now - 1000 * 60),
       cnt = 0;
   query.greaterThan('presentedAt',presDate);
@@ -104,7 +104,7 @@ Parse.Cloud.job("populate", function(request, status) {
 Parse.Cloud.job("updateClicks", function(req, status) {
   var query = new Parse.Query(Stream),
       now = (new Date()).getTime(),
-      presDate = new Date(now - 1000 * 60 * 60), // anything we tried to present recently
+      presDate = new Date(now - Stream.ACTIVE_STREAM_AGE), // anything we tried to present recently
       promises = [];
   query.greaterThan('presentedAt',presDate);
   query.find().then(function(streams) {
@@ -113,7 +113,13 @@ Parse.Cloud.job("updateClicks", function(req, status) {
     }
     return Parse.Promise.when(promises);    
   }).then(function(){
-    status.success('Updated Clicks on Streams: '+promises.length);
+    items = 0;
+    for (var i in arguments) {
+      if (arguments[i]) {
+        items += arguments[i];
+      }
+    }
+    status.success(promises.length + ' streams, ' + items + ' items updated');
   }, Router.onError(req, status));
 });
 
@@ -136,10 +142,42 @@ Parse.Cloud.job("dedupeContent", function(req, status) {
         seenUrls[sId].push(url);
       }
     }
+    query = new Parse.Query(Content);
+    query.doesNotExist('source');
+    query.limit(1000);
+    return query.find();
+  }).then(function(brokenItems) {
+    toDelete = CCObject.arrayUnion(toDelete,brokenItems);
     return Parse.Object.destroyAll(toDelete);
   }).then(function() {
     status.success("Deleted "+toDelete.length+" dupes");
   }, Router.onError(req, status));
+});
+
+function removeOldObjects(className, maxAge) {
+  var query = new Parse.Query(className),
+      latest = new Date( new Date().getTime() - maxAge );
+  query.lessThan('updatedAt',latest);
+  query.limit(1000);
+  return query.find().then(function(objects) {
+    if (!objects.length) {
+      return true;
+    }
+    CCObject.log('[Bookkeeping] ' + className + ':' + objects.length, 10);
+    return Parse.Object.destroyAll(objects);
+  });
+}
+
+Parse.Cloud.job("bookkeeping", function(req, status) {
+  var classes = ["HttpFacebookGraph","HttpHeadline","HttpMetaTags","HttpPrismatic","HttpRss","HttpRssQuery","HttpTwitter","Stat"],
+      maxAge = 1000 * 60 * 60 * 24,
+      promises = [];
+  for (var c in classes) {
+    promises.push(removeOldObjects(classes[c], maxAge));
+  }
+  return Parse.Promise.when(promises).then(function() {
+    status.success("Cleaned Database");
+  });
 });
 
 function onBeforeSaveSuccess(res) {

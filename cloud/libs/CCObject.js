@@ -1,5 +1,5 @@
 
-exports.LOG_PRIORITY_MIN = 3;
+exports.LOG_PRIORITY_MIN = 2;
 
 exports.log = function(str, priority) {
   priority = priority || 1;

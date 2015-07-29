@@ -73,27 +73,12 @@ var Content = Parse.Object.extend("Content", {
    * (where more data is added)
    */
   exportToStreamItem: function(delta) {
-    var StreamItem = Parse.Object.extend("StreamItem"), // IMPORTANT : can't require due to include recursion
+    var StreamItem = Parse.Object.extend("StreamItem"), // IMPORTANT : can't req due to include recursion
         item = new StreamItem(),
-        keys = { // What goes to StreamItem? localKey => remoteKey
-          'images' : 'images',
-          'publisher' : 'publisher',
-          'score' : 'score',
-          'tags' : 'tags',
-          'text' : 'text',
-          'title' : 'title',
-          'url' : 'url',
-          'host' : 'host',
-          'source' : 'source',
-        },
         matchRegex = delta.getSearchInclusionsRegexStr(),
         matches = (this.get('canonicalSearchString') || '').match(new RegExp(matchRegex, 'gi')),
-        matchCount =  matches && matches.length > 0 ? matches.length : 1;
-    for (var k in keys) {
-      if (this.has(k)) {
-        item.set(keys[k], this.get(k));
-      }
-    }
+        matchCount =  matches && matches.length > 0 ? matches.length : 1,
+        exported = this.exportTo(item);
     matches = CCObject.arrayRemove(CCObject.arrayUnique(matches),'');
     if (this.has('redirectUrl')) {
       // Bypass the 301 all together... TODO: consider making this an optional Fork?
@@ -110,7 +95,40 @@ var Content = Parse.Object.extend("Content", {
     item.set('content',this);
     return item;
   },
-
+  exportTo: function(targetItem) {
+    var keys = { // What goes to StreamItem? localKey => remoteKey
+          'images' : 'images',
+          'publisher' : 'publisher',
+          'score' : 'score',
+          'tags' : 'tags',
+          'text' : 'text',
+          'title' : 'title',
+          'url' : 'url',
+          'host' : 'host',
+          'source' : 'source',
+          'params' : 'params',
+        },
+        vals = {};
+    for (var k in keys) {
+      if (this.has(k)) {
+        targetItem.set(keys[k], this.get(k));
+      }
+    }
+    return targetItem;
+  },
+  copyUpdatesToStreamItems: function() {
+    var self = this,
+        query = new Parse.Query("StreamItem");
+    query.equalTo('content',this);
+    query.limit(1000);
+    return query.find().then(function(items){
+      CCObject.log('[Content '+self.id+'] being copied to items: '+items.length,3);
+      for (var i in items) {
+        self.exportTo(items[i]);
+      }
+      return Parse.Object.saveAll(items);
+    });
+  },
   // Validates against _keys
   assign: function(map) {
     for(var k in map) {
@@ -152,6 +170,7 @@ var Content = Parse.Object.extend("Content", {
         hasBeenAnalyzed = lastAnalysis ? true : false; // If it hasn't been analyzed, let's just get it into the DB
 
     // If new, ensure it's unique...
+    /* Should only be necessary if we're seeing dupe bugs...
     if (!this.id) {
       var query = new Parse.Query(Content);
       query.equalTo('url',this.get('url'));
@@ -166,8 +185,9 @@ var Content = Parse.Object.extend("Content", {
           return true;
         });
       }));
-    }
-
+    }*/
+               
+/*
     // Get Headline score
     if (parseInt(this.get('headlineScore') || 0) <= 0) {
       log += 'headline, ';
@@ -181,7 +201,7 @@ var Content = Parse.Object.extend("Content", {
         self.set('headlineSentiment',sentiments[summary] || 0);
         return true;
       }));
-    }
+    }*/
 
     // Get Facebook shares
     if (parseInt(this.get('fbShares') || 0) <= 0) {
@@ -223,6 +243,7 @@ var Content = Parse.Object.extend("Content", {
     }
 
     // Get Prismatic URL analysis
+    /*
     if (!this.has('type')) {
       log += 'prismatic, ';
       promises.push(Analyzer.prismaticAnnotations(self.get('url')).then(function(pAnnotations) {
@@ -243,7 +264,7 @@ var Content = Parse.Object.extend("Content", {
 
         return true;
       }));
-    }
+    }*/
 
     // Do it all, then apply final sanitization
     return Parse.Promise.when(promises).then(function() {

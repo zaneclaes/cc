@@ -1,0 +1,20 @@
+if item.imageUrl 
+  a(href="#{item.url}",target="_blank")
+    img(src="#{item.imageUrl}")
+.deltas-content
+  h3
+    a(href="#{item.url}",target="_blank") #{item.title}
+  p
+    if item.price
+      if item.discount
+        span
+          span.price.discounted $#{item.price}
+          | &nbsp;
+          span.price.discount $#{item.discount} 
+      else
+        span.price $#{item.price} 
+      span | 
+    if item.rating
+      - var stars = item.rating
+      include ../widgets/stars.jade
+  p !{item.text}

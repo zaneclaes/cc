@@ -54,7 +54,9 @@ var Stream = Parse.Object.extend("Stream", {
    * Then queries stream items in order to return them to the client
    */
   present: function(options) {
-    var self = this;
+    var self = this,
+        minPres = (new Date()).getTime() - (Stream.ACTIVE_STREAM_AGE * 3/4),
+        updatePres = !this.has('presentedAt') || this.get('presentedAt').getTime() < minPres;
     options = options || {};
     //options = JSON.parse(JSON.stringify(options || {}));
     options.limit = parseInt(options.limit) || 20;
@@ -64,11 +66,13 @@ var Stream = Parse.Object.extend("Stream", {
     options.direction = (options.direction || 'desc').toLowerCase().indexOf('asc') === 0 ? 'ascending' : 'descending';
     options.age = parseInt(options.age || 0);
 
-    // Will trigger a populate command...
-    this.set('presentedAt', new Date());
-    return this.save().then(function(){
-      return self._present(options);
-    });
+    var promises = [this._present(options)];
+    if (updatePres) {
+      this.set('presentedAt', new Date());
+      promises.push(this.save());
+    }
+
+    return Parse.Promise.when(promises);
   },
   // Internal: called by present once population is complete.
   _present: function(options) {
@@ -116,12 +120,15 @@ var Stream = Parse.Object.extend("Stream", {
         
         for (var i in items) {
           var item = items[i],
-              variableMap = item.present(options);
+              variableMap = CCObject.extend(item.present(options), item.get('params') || {});
+          variableMap.clicks = item.get('clicks');
           jadeVars.items.push(variableMap);
         }
         // Running Jade Version 0.27.6 , no compileFile()
         // 2nd param is options, if necessary.
-        return jade.compile(contents, {})(jadeVars);
+        return jade.compile(contents, {
+          filename: 'cloud/views/main.jade'
+        })(jadeVars);
       }
       else if (options.format === 'rss') {
         var firstItem = items.length > 0 ? items[0] : false,
@@ -177,7 +184,7 @@ var Stream = Parse.Object.extend("Stream", {
   /**
    * Loops through stream_items and pegs them to the scheduling rules
    */
-  schedule: function(items) {
+  schedule: function(items, force) {
     if (!items) {
       var self = this,
           query = new Parse.Query(StreamItem);
@@ -192,23 +199,23 @@ var Stream = Parse.Object.extend("Stream", {
       return Parse.Promise.as([]);
     }
     else {
-      return this._schedule(items);
+      return this._schedule(items, force);
     }
   },
-  _schedule: function(items) {
+  _schedule: function(items, force) {
     // Sort the items in ascending scheduled order
     items = items.sort(function(a, b){
       aT = a.has('scheduledAt') ? a.get('scheduledAt').getTime() : 0;
       bT = b.has('scheduledAt') ? b.get('scheduledAt').getTime() : 0;
       return aT - bT;
     });
-    var spacing = this.get('spacing') || (1000 * 60 * 60 * 4),
-        randomization = this.get('randomization') || (1000 * 60 * 60),
+    var spacing = this.getSpacing(),
+        randomization = spacing / 4,
         changed = false;
     for (var i=1; i<items.length; i++) {
       var lastItem = items[i-1],
           item = items[i],
-          lastTime = lastItem.get('scheduledAt').getTime(),
+          lastTime = lastItem.has('scheduledAt') ? lastItem.get('scheduledAt').getTime() : 0,
           rand = Math.floor(Math.random() * randomization) - randomization / 2,
           nextTime = lastTime + spacing + rand,
           minTime = lastTime + spacing - randomization / 2,
@@ -221,7 +228,7 @@ var Stream = Parse.Object.extend("Stream", {
         changed = true;
       }
     }
-    return changed ? Parse.Object.saveAll(items) : Parse.Promise.as(items);
+    return changed || force ? Parse.Object.saveAll(items) : Parse.Promise.as(items);
   },
   /**
    * Fills up the stream with new StreamItem objects by calling fetchDeltas
@@ -241,6 +248,7 @@ var Stream = Parse.Object.extend("Stream", {
       if (item && item.createdAt) {
         options.startDate = item.createdAt;
       }
+      CCObject.log('[Stream '+self.id+'] Populating '+(item ? '' : 'new deltas'),2);
       return self.fetchDeltas(options);
     }).then(function(items) {
       allItems = CCObject.arrayUnion(allItems, items);
@@ -285,18 +293,39 @@ var Stream = Parse.Object.extend("Stream", {
         upDate = new Date(now - StreamItem.CLICK_UPDATE_INTERVAL),
         promises = [];
     query.lessThan('clicksUpdatedAt',upDate);
+    query.containedIn('status',StreamItem.STREAM_STATUSES);
+    query.equalTo('stream',this);
     query.limit(100);
     return query.find().then(function(items) {
+      //CCObject.log('Stream updateClicks on '+items.length,3);
       for (var i in items) {
-        promises.push(items[i].updateClicks());
+        promises.push(items[i].getClicks());
       }
       return Parse.Promise.when(promises);
+    }).then(function() {
+      var items = [];
+      for (var i in arguments) {
+        for (var j in arguments[i]) {
+          if (arguments[i][j]) {
+            items.push(arguments[i][j]);
+          }
+        }
+      }
+      return items.length ? Parse.Object.saveAll(items) : Parse.Promise.as(true);
+    }).then(function() {
+      return promises.length;
     });
   },
 
+  /**
+   * Accessor methods, assigning defaults
+   */
+  getSpacing: function() {
+    return this.get('spacing') || (1000 * 60 * 60 * 4);
+  },
 }, {
   // @Class
-
+  ACTIVE_STREAM_AGE: 1000 * 60 * 60 * 24, // Any stream displayed in the last day is "active"
   /**
    * Find the streamId, populate, and return
    */
@@ -318,27 +347,32 @@ var Stream = Parse.Object.extend("Stream", {
     if (!items) {
       return Parse.Promise.as([]);
     }
-    var seen = [],
+    var seen = {},
         dupes = [],
         out = [];
     for (var i in items) {
       var r = items[i].get('relationship'),
           url = items[i].get('url'),
-          title = items[i].get('title');
-      if (seen.indexOf(r) >= 0 || seen.indexOf(url) >= 0 || seen.indexOf(title) >= 0) {
+          title = items[i].get('title'),
+          sourceId = items[i].get('source').id;
+      seen[sourceId] = seen[sourceId] || [];
+      if (seen[sourceId].indexOf(r) >= 0 || 
+          seen[sourceId].indexOf(url) >= 0 || 
+          seen[sourceId].indexOf(title) >= 0) {
         dupes.push(items[i]);
         continue;
       }
       out.push(items[i]);
-      seen.push(r);
-      seen.push(url);
-      seen.push(title);
+      seen[sourceId].push(r);
+      seen[sourceId].push(url);
+      seen[sourceId].push(title);
     }
 
     if (dupes.length <= 0) {
       return Parse.Promise.as(out);
     }
     CCObject.log('[Stream] de-duping x'+dupes.length,3);
+    CCObject.log(seen);
     return Parse.Object.destroyAll(dupes).then(function(){
       return out;
     });
@@ -347,7 +381,7 @@ var Stream = Parse.Object.extend("Stream", {
    * First, update the click count on all items in the stream
    * Then, reschedule their times
    */
-  schedule: function(items) {
+  schedule: function(items, force) {
     if (!items || items.length <= 0) {
       return Parse.Promise.as([]);
     }
@@ -362,7 +396,7 @@ var Stream = Parse.Object.extend("Stream", {
       streams[stream.id] = stream;
     }
     for (var streamId in mapped) {
-      promises.push(streams[streamId].schedule(mapped[streamId]));
+      promises.push(streams[streamId].schedule(mapped[streamId], force));
     }
     return Parse.Promise.when(promises);
   },

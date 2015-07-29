@@ -1,0 +1,7 @@
+if item.imageUrl 
+  a(href="#{item.url}",target="_blank")
+    img(src="#{item.imageUrl}")
+.deltas-content
+  h3
+    a(href="#{item.url}",target="_blank") #{item.title}
+  p !{item.text}

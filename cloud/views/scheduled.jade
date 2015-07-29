@@ -1,12 +1,21 @@
 .container
   .row-fluid
     .span12.top
+      form(method="POST",action="#{root}/scheduled",style="margin-top:14px;")
+        input(type="hidden",name="spacing",value="1")
+        .btn-group.pull-right.autosubmit
+          a.btn.btn-info.dropdown-toggle(data-toggle="dropdown",href="#",name="template")
+            span Reschedule
+            span.caret
+          ul.dropdown-menu
+            - var spacings = [1,2,3,4,5,6,9,12,16,20,24]
+            each spacing in spacings
+              li 
+                - var sec = spacing * 1000 * 60 * 60
+                a(href="##{sec}") #{spacing} Hour(s)
       h1 Scheduled Posts
-      p 
-        i If you don't approve a post before the scheduledAt date, it will automatically go live.
       if pendingCount == 0
-        p 
-          b Nothing scheduled! Add more streams, or loosen your delta rules.
+        p Nothing scheduled! Add more streams, or loosen your delta rules.
       else
         ul.fa-ul
           each item in pending
@@ -15,6 +24,11 @@
               h4
                 a(href="#{item.originalUrl}",target="_blank") #{item.title}
               code #{item.url}
+              if item.images.length > 0
+                .images
+                  each image in item.images
+                    img(src="#{image.url}",style="margin-right: 10px;")
+                br
               p #{item.text}
               table
                 tr
@@ -33,8 +47,19 @@
                     b Score: 
                   td
                     i #{item.score}
+                tr
+                  td
+                    b Source:
+                  td
+                    .fa-fw.fa.fa-tint
+                    a(href="#{root}/streams/#{item.stream.objectId}#source-#{item.source.objectId}") #{item.source.name} 
+                    .fa-fw.fa.fa-arrow-right(style="color: #ccc;")
+                    .fa-fw.fa.fa-filter
+                    a(href="#{root}/streams/#{item.stream.objectId}#delta-#{item.delta.objectId}") #{item.delta.name} 
+                    .fa-fw.fa.fa-arrow-right(style="color: #ccc;")
+                    .fa-fw.fa.fa-rss
+                    a(href="#{root}/streams/#{item.stream.objectId}") #{item.stream.name} 
               br
               form(method="post",action="/stream_items/#{item.objectId}")
                 button.btn.btn-danger(type='submit',name='reject') Reject
-                // button.btn.btn-success.pull-right(type='submit',name='accept') Accept
               hr

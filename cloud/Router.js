@@ -162,6 +162,7 @@ function getJadeVariables(req) {
     pendingCount: 0,
     streamDeltas: false,
     oauthCallback: root + "/oauth/callback",
+    templates: ['default','product'],
   };
 }
 function renderLoginError(error, res) {
@@ -323,14 +324,39 @@ function mapObjectsOnRequest(req, key, objects) {
     req[mapKey][obj.id] = obj; 
   }
 }
+// say we have stream items, like scheduled posts
+// we don't want to use an inclusion query to keep down load
+// instead, we post-hoc map the full objects back onto each obj
+function mapFullObjectsOntoObjects(objects, req) {
+  var mappable = {
+    stream: req.streamMap,
+    source: req.sourcesMap,
+    delta: req.deltaMap,
+  };
+  for (var k in mappable) {
+    for (var o in objects) {
+      var cmp = objects[o][k],
+          full = mappable[k][cmp.objectId];          
+      if (full) {
+        objects[o][k] = JSON.parse( JSON.stringify( full ) );
+      }
+    }
+  }
+}
 /**
  * Errors if the user is not logged in
  * Also assigns streams, pending, deltas, stream, streamDeltas
  */
 function requireLogin(req, res, next) {
-  req.vars = getJadeVariables(req);
   if (!Parse.User.current()) {
     renderLoginError("You must be logged in to do that.", res);
+    return;
+  }
+  loadCurrentUserData(req, res, next);
+}
+function loadCurrentUserData(req, res, next) {
+  if (!Parse.User.current()) {
+    next();
     return;
   }
 
@@ -407,36 +433,53 @@ function requireLogin(req, res, next) {
     mapObjectsOnRequest(req, 'sources', sources);
     mapObjectsOnRequest(req, 'forks', forks);
 
-    // Find static content
-    var qc = null;
+    // Find static & dynamic content...
+    var qsc = null,
+        qdc = null;
     if (req.stream && sources && sources.length) {
-      var staticSources = [];
+      var staticSources = [],
+          dynamicSources = [];
       for (var s in sources) {
         if (sources[s].get('type') === Source.TYPE_STATIC) {
           staticSources.push(sources[s]);
         }
+        else {
+          dynamicSources.push(sources[s]);
+        }
       }
       if (staticSources.length > 0) {
-        qc = new Parse.Query(Content);
-        qc.containedIn('source', staticSources);
-        qc.descending('createdAt');
+        qsc = new Parse.Query(Content);
+        qsc.containedIn('source', staticSources);
+        qsc.descending('createdAt');
+        qsc.limit(1000);
       }
-    } 
+      if (dynamicSources.length > 0) {
+        qdc = new Parse.Query(Content);
+        qdc.containedIn('source', dynamicSources);
+        qdc.descending('createdAt');
+        qdc.limit(1000);
+      }
+    }
 
     // Find all the pending stream items that are forked or accepted
     var qi = new Parse.Query(StreamItem);
     qi.containedIn('stream',req.streams);
     qi.greaterThan('scheduledAt', new Date());
     qi.containedIn('status',[StreamItem.STATUS_FORKED,StreamItem.STATUS_ACCEPTED]);
+    qi.ascending('scheduledAt');
 
     return Parse.Promise.when([
-      qc ? qc.find() : Parse.Promise.as([]),
-      qi.find().then(Stream.dedupe).then(Stream.schedule),
+      qsc ? qsc.find() : Parse.Promise.as([]),
+      qdc ? qdc.find() : Parse.Promise.as([]),
+      qi.find().then(Stream.dedupe).then(schedule(req)),
     ]);
-  }).then(function(staticcontents, items) {
-    mapObjectsOnRequest(req, 'staticcontents', staticcontents || []);
+  }).then(function(static_contents, dynamic_contents, items) {
+    mapObjectsOnRequest(req, 'static_contents', static_contents || []);
+    mapObjectsOnRequest(req, 'dynamic_contents', dynamic_contents || []);
 
     var itms = JSON.parse(JSON.stringify(items));
+    mapFullObjectsOntoObjects(itms, req);
+
     for (var i in itms) {
       var date = new Date(itms[i].scheduledAt.iso);
       itms[i].scheduledAt = date.toString();
@@ -448,6 +491,28 @@ function requireLogin(req, res, next) {
     req.vars.pending = itms;
     next();
   }, exports.onError(req, res));
+}
+
+// Break this out into a helper function b/c we may want to move the first item
+// This happens when we POST to /scheduled, but since this is called as part of the
+// login steps we need it up here, not in its own endpoint code.
+function schedule(req) {
+  return function(items) {
+    if (req.url === '/scheduled' && req.method === 'POST' && items.length > 0) {
+      // Reschedule the first item(s) before scheduling.
+      var map = {};
+      for (var i in items) {
+        var stream = req.streamMap[items[i].get('stream').id];
+        if (stream && !map[stream.id]) {
+          var spacing = parseInt( req.body.spacing || stream.getSpacing() );
+          var scheduledAt = (new Date()).getTime() + spacing;
+          items[i].set('scheduledAt', new Date(scheduledAt));
+          map[stream.id] = true;
+        }
+      }
+    }
+    return Stream.schedule(items, true);
+  }
 }
 
 /***************************************************************************************
@@ -492,15 +557,31 @@ function registerWeb() {
     renderWebpage('stream', req, res);
   });
   app.post('/streams/'+objectIdRegex, requireLogin, function(req, res) {
-    req.stream.set('name',req.body.name);
+    if (typeof req.body.populate !== 'undefined') {
+      req.stream.populate().then(function() {
+        res.redirect(req.url);// Back into the GET endpoint.        
+      });
+      return;
+    }
+    var keys = ['name', 'template'];
+    for (var k in keys) {
+      var val = req.body[keys[k]];
+      if (typeof val !== 'undefined') {
+        req.stream.set(keys[k], val);
+      }
+    }
     req.stream.save().then(function() {
-      res.redirect(req.url);// Back into the GET endpoint.
+      res.redirect('/streams/'+req.stream.id+'#preview');// Back into the GET endpoint.
     }, exports.onError(req, res));
   });
   app.get('/streams/'+objectIdRegex+'/deltas', requireLogin, function(req, res) {
     res.render('deltas.jade', req.vars);
   });
+  // Scheduling
   app.get('/scheduled', requireLogin, function(req, res) {
+    renderWebpage('scheduled', req, res);
+  });
+  app.post('/scheduled', requireLogin, function(req, res) {
     renderWebpage('scheduled', req, res);
   });
   // Deltas
@@ -602,16 +683,15 @@ function registerWeb() {
     if (!map) {
       return;
     }
-    console.log(map);
-    console.log(Object.keys(map));
     var url = Object.keys(map)[0];
-    console.log(url);
     map = map[url];
     map[url] = url;
     for (var k in map) {
       req.content.set(k, map[k]);
     }
     req.content.save().then(function() {
+      return req.content.copyUpdatesToStreamItems();
+    }).then(function() {
       res.redirect('/streams/'+req.body.streamId+'#source-'+source.id);  
     });
   });
@@ -690,6 +770,14 @@ function registerWeb() {
     }, exports.onError(req, res));
   });
 
+  app.get('/preview/' + canonicalNameRegex, function(req, res) {
+    var parts = req.url.split('/'),
+        stream_name = parts[2];
+    req.vars.stream_name = stream_name;
+    req.vars.title = "Preview";
+    renderWebpage('preview', req, res);
+  });
+
   // About renderer
   app.get('/about/[a-zA-Z0-9\-]+', renderSubPage);
 
@@ -701,7 +789,6 @@ function registerWeb() {
       },
       allowedPages = Object.keys(titleMap);
   var genericRenderer = function(req, res) {
-    req.vars = getJadeVariables(req);
     page = req.url.split('/')[1];
     page = page && page.length > 0 ? page : 'index';
     if (!titleMap[page]) {
@@ -711,9 +798,9 @@ function registerWeb() {
     renderWebpage(page, req, res);
   };
   for (var k in allowedPages) {
-    app.get('/'+allowedPages[k], genericRenderer);
+    app.get('/'+allowedPages[k], loadCurrentUserData, genericRenderer);
   }
-  app.get('/',genericRenderer);
+  app.get('/',loadCurrentUserData,genericRenderer);
   app.use(function(req, res) {
     renderWebpage('404', req, res);
   });

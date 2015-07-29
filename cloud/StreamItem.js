@@ -31,9 +31,6 @@ var StreamItem = Parse.Object.extend("StreamItem", {
       scheduledAt : (this.get('scheduledAt') || new Date()).toUTCString(),
       imageUrl : images && images.length > 0 ? images[0].url : '',
     };
-    //return CCObject.scrubJSON(this, ['holdDate','operations','relationship','status','thumbnails',
-    //                                 'publisher','pendingForkIds','forkResults','contentScore',
-    //                                 'content','stream','source','delta','updatedAt']);
   },
 	/**
 	 * Before Save
@@ -66,6 +63,12 @@ var StreamItem = Parse.Object.extend("StreamItem", {
         return forkIds.indexOf(a.id) - forkIds.indexOf(b.id);
       });
       return Fork.forkStreamItem(self, sortedForks, options);
+    }).then(function(res) {
+      // Without this, updateClicks will not run...
+      if (!self.get('clicksUpdatedAt') && self.findForkResultsOfType(Fork.TYPE_SHORTENER)) {
+        self.set('clicksUpdatedAt', new Date());
+      }
+      return res;
     });
 	},
   /**
@@ -125,39 +128,59 @@ var StreamItem = Parse.Object.extend("StreamItem", {
     });
   },
   /**
-   * Fetch the click count from bitly (or wherever...)
+   * Search for results from a specific fork type...
    */
-  updateClicks: function() {
-    var self = this,
-        clicks = this.get('clicks'),
-        clicksUpdatedAt = this.get('clicksUpdatedAt'),
-        age = (new Date()).getTime() - (clicksUpdatedAt ? clicksUpdatedAt.getTime() : 0),
-        forkResults = this.get('forkResults') || {},
-        forkIds = Object.keys(forkResults),
-        forkRes = null;
+  findForkResultsOfType: function(type) {
+    var forkResults = this.get('forkResults') || {};
     for (var forkId in forkResults) {
-      if (forkResults[forkId].type === Fork.TYPE_SHORTENER) {
-        forkRes = forkResults[forkId];
-        break;
+      if (forkResults[forkId].type === type) {
+        return forkResults[forkId];
       }
     }
+    return false;
+  },
+  /**
+   * Fetch the click count from bitly (or wherever...)
+   * Returns either false, or an array of objects to save
+   */
+  getClicks: function() {
+    var self = this,
+        clicks = this.get('clicks') || 0,
+        forkResults = this.get('forkResults') || {},
+        forkIds = Object.keys(forkResults),
+        forkRes = this.findForkResultsOfType(Fork.TYPE_SHORTENER);
     // Throttling
-    if (!forkRes || age < StreamItem.CLICK_UPDATE_INTERVAL) {
-      return Parse.Promise.as(clicks);
+    if (!forkRes) {
+      if (this.has('clicksUpdatedAt')) {
+        // get rid of it.
+        this.set('clicksUpdatedAt',null);
+        this.save().then(function() {
+          return false;
+        });
+      }
+      else {
+        return Parse.Promise.as(false);
+      }
     }
     return Fork.clicks(forkRes).then(function(c) {
-      if (c >= 0) {
-        CCObject.log("Clicks Determined: "+c,3);
+      if (c >= 0 && c !== clicks) {
+        //CCObject.log("Clicks Determined: "+c,3);
         clicks = c;
         self.set('clicks',c);
         self.set('clicksUpdatedAt',new Date());
-        return self.save();
+        var ret = [self];
+        if (c > 0) {
+          var Stat = Parse.Object.extend("Stat"),
+              stat = new Stat();
+          stat.set('streamItem',self);
+          stat.set('clicks',c);
+          ret.push(stat);
+        }
+        return ret;
       }
       else {
-        return c;
+        return false;
       }
-    }).then(function() {
-      return clicks;
     });
   },
 }, {
@@ -176,18 +199,21 @@ var StreamItem = Parse.Object.extend("StreamItem", {
   // For dynamic sources, only returns new (saved) items
   // For statics, returns the StreamItem representation in all cases
   //
-  factory: function(stream, delta, objects, options) {
+  factory: function(stream, delta, contents, options) {
     var map = {},
+        created = [],
         query = new Parse.Query(StreamItem);
-    for (var o in objects) {
-    	var obj = objects[o];
+    for (var c in contents) {
+    	var obj = contents[c];
     	var relationship = obj.className+'_'+obj.id;
     	map[relationship] = obj;
     }
     var relationships = Object.keys(map);
+    CCObject.log(relationships, 2);
 
     query.containedIn('relationship', relationships);
     query.equalTo('stream',stream);
+    // We don't care if it came from the same delta or not.
     query.descending('createdAt');
     query.limit(1000);
     return query.find().then(function(items) {
@@ -217,9 +243,11 @@ var StreamItem = Parse.Object.extend("StreamItem", {
         built[relationship] = StreamItem.build(stream, delta, map[relationship], options);
         if (built[relationship]) {
           ret.push(built[relationship]);
+          created.push(relationship);
         }
       }
-      CCObject.log('[ItemFactory] returning: '+ret.length, 3);
+      CCObject.log('[ItemFactory] returning: '+ret.length+' (created: '+created.length+')', 3);
+      CCObject.log(created, 2);
       return ret;
     });
   },

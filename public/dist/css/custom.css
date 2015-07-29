@@ -66,7 +66,13 @@ form.editable .clickable {
 }
 form.editable button, form.editable textarea, form.editable input {
   display: none;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+form.editable button:first-child, form.editable textarea:first-child, form.editable input:first-child {
   margin-top: 20px;
+}
+form.editable button:last-child, form.editable textarea:last-child, form.editable input:last-child {
   margin-bottom: 20px;
 }
 

@@ -21,8 +21,8 @@
                 a.hashable(href='#delta-new') New Delta
           li
             a.hashable(href='#preview')
-              span.fa.fa-fw.fa-eye(id="stream-preview-icon")
-              span Preview
+              span.fa.fa-fw.fa-edit(id="stream-preview-icon")
+              span Manage Stream
           li
             a.hashable(href='#integration')
               span.fa.fa-fw.fa-share-alt(id="stream-integration-icon")
@@ -43,7 +43,25 @@
               .source(id="fork-#{fork.objectId}")
                 include ./fork.jade
           .tab-pane(id="preview")
+            link(href="#{root}/dist/css/styles/default.css",rel="stylesheet")
             center
+              form(method="POST",action="#{root}/streams/#{stream.objectId}",style="margin-top:14px;")
+                button.btn.btn-primary.pull-right(type='submit',name='populate') Populate
+              form(method="POST",action="#{root}/streams/#{stream.objectId}",style="margin-top:14px;")
+                input(type="hidden",name="template",value="")
+                .btn-group.pull-left.autosubmit
+                  a.btn.btn-info.dropdown-toggle(data-toggle="dropdown",href="#",name="template")
+                    span Change Template
+                    span.caret
+                  ul.dropdown-menu
+                    each template in templates
+                      li 
+                        a(href="##{template}") 
+                          if template === stream.template || (template === 'default' && !stream.template)
+                            span.fa.fa-fw.fa-check-square
+                          else
+                            span.fa.fa-fw.fa-square-o
+                          span #{template}
               h2 Your Embeddable Stream:
             hr
             #stream-preview

@@ -1,0 +1,17 @@
+.deltas
+  each item in items
+    .row
+      .col-md-4
+      .col-md-4.deltas-item
+        if !stream.template || stream.template === 'default'
+          include ./templates/default-item.jade
+        else if stream.template === 'product'
+          include ./templates/product-item.jade
+      .col-md-4
+        if item.clicks
+          h4 #{item.clicks} clicks
+        form(method="POST",action="#{root}/stream_items/#{item.id}")
+          button.btn.btn-danger(type='submit',name='delete') Delete
+    // /item
+    hr
+// ./deltas

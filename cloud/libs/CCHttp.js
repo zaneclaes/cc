@@ -55,8 +55,10 @@ exports.httpCachedRequest = function(options) {
           console.log(httpResponse);
           console.log(e);
           console.log('byte size http' + CCObject.byteSize(httpResponse));
-          console.log('byte size obj' + CCObject.byteSize(obj));
-        }); 
+          console.log('byte size obj' + CCObject.byteSize( JSON.stringify( obj ) ));
+        }).then(function() {
+          return true;
+        });
       },
   		row = null;
 

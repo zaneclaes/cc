@@ -178,7 +178,7 @@ var Source = Parse.Object.extend("Source", {
 	/**
 	 * Call out to Prismatic
 	 */
-	prismatic: function(options) {
+	prismaticScraper: function(options) {
 		var source = options.source,
 				settings = source.get('settings'),
 				sourceId = source.id,
@@ -230,6 +230,55 @@ var Source = Parse.Object.extend("Source", {
 			CCObject.log(contentMap);
 			return Content.factory(contentMap, options.source);
 		});
+	},
+	/**
+	 * Some topics:
+	 * Learning Theory: 24158, Learning Styles: 24157, Neuroscience: 3078, Music Education: 27939
+	 */
+	prismatic: function(options) {
+		var settings = options.source.get('settings');
+	  return Parse.Cloud.httpRequest({
+	    url: 'http://interest-graph.getprismatic.com/doc/search',
+	    method: 'POST',
+	    body: JSON.stringify({
+	      query : settings.query,
+	      limit : 20,
+	      page : 1,
+	    }),
+	    headers: {
+	      'Content-Type': 'application/json',
+	      'X-API-TOKEN': settings['api-token'],
+	    },
+	  }).then(function(res) {
+	  	var json = JSON.parse(res.text),
+	  			contentMap = {};
+	  	for (var i in json.items) {
+	  		var data = json.items[i],
+	  				tags = [],
+	  				score = 0;
+	  		for (var t in data.topics) {
+	  			tags.push(data.topics[t].topic);
+	  			score += data.topics[t].score;
+	  		}
+	  		contentMap[data.url] = {
+	  			source : options.source,
+	  			weight : score * (options.source.get('weight') || 100),
+	  			title : data.title,
+	  			publisher : data.domain,
+	  			text : data.text,
+	  			tags : tags,
+	  			images : data.images,
+	  			timestamp : data.date,
+	  		};
+	  	}
+	  	return Content.factory(contentMap, options.source);
+	  }, function(err) {
+	  	CCObject.log('[ERROR] Swallowing HTTP Prismatic Error:',10);
+	  	CCObject.log(err,10);
+	  	return false;
+	  }).then(function(objs) {
+	  	return typeof objs === 'array' ? objs : [];
+	  });
 	},
 	/**
 	 * Fetch a RSS feed from a single URL
@@ -367,15 +416,32 @@ var Source = Parse.Object.extend("Source", {
 			query.equalTo("objectId",options.sourceId);
 		}
 		return query.find().then(function(sources) {
-			CCObject.log('sources query found '+sources.length);
-			var promises = [];
-			for (var i=0; i<sources.length; i++) {
-				promises.push(sources[i].ingest(options));
+			return Source._ingest(sources, options);
+		});
+	},
+	//
+	// Recursive ingestion, which only runs options.max jobs
+	// per recursion to keep QPS down...
+	//
+	_ingest: function(sources, options) {
+		var promises = false,
+				max = options.max || 5,
+				remaining = sources.slice(max),
+				promises = [];
+
+		promises = [];
+		for (var i=0; i<sources.length && i<max; i++) {
+			promises.push(sources[i].ingest(options));
+		}
+		CCObject.log('[Ingestion] processing: '+promises.length + '/' + sources.length,3);
+		return Parse.Promise.when(promises).then(function() {
+			CCObject.log('[Ingestion] batch completed; remaining: '+ remaining.length,3);
+			if (remaining.length > 0) {
+				return Source._ingest(remaining, options);
 			}
-			return Parse.Promise.when(promises).then(function() {
-				CCObject.log('[Ingestion] queue completed: '+promises.length);
+			else {
 				return true;
-			});
+			}
 		});
 	},
 

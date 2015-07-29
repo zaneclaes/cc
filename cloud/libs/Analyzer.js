@@ -83,7 +83,7 @@ exports.prismaticAnnotations = function(url, response) {
     cacheName: 'PrismaticAnnotation',
     maxAge: -1, // never expire, always goood.
     method: 'POST',
-    header:{
+    headers: {
       'Content-Type': 'application/json',
     },
   });
