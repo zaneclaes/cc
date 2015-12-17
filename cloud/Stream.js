@@ -98,11 +98,12 @@ var Stream = Parse.Object.extend("Stream", {
     if (options.age) {
       query.greaterThan('scheduledAt', new Date(now - options.age));
     }
-    
+
     query.containedIn('status',statuses);
     query.limit(options.limit);
     query.skip(options.offset);
     query[options.direction](options.order);
+    query.include('content');
     return query.find().then(Stream.dedupe).then(function(items) {
       if (options.format === 'html') {
         var itemVars = []
@@ -117,7 +118,7 @@ var Stream = Parse.Object.extend("Stream", {
         if (!contents) {
           throw new Error('Template not found');
         }
-        
+
         for (var i in items) {
           var item = items[i],
               variableMap = CCObject.extend(item.present(options), item.get('params') || {});
@@ -145,6 +146,12 @@ var Stream = Parse.Object.extend("Stream", {
         out.startElement('description').text(desc || self.get('name')).endElement();
         out.startElement('language').text('en-us').endElement();
 
+        if (options.order == 'scheduledAt') {
+          items.sort(function(a,b){
+            return a.present(options).pubDate - b.present(options).pubDate;
+          });
+        }
+
         for (var i in items) {
           var item = items[i],
               map = item.present(options),
@@ -156,16 +163,30 @@ var Stream = Parse.Object.extend("Stream", {
           //out.startElement('author').text(item.get('host')).endElement();
           out.startElement('guid').writeAttribute('isPermaLink','false').text(map.id).endElement();
           out.startElement('pubDate').text(map.scheduledAt).endElement();
-          if (options.thumbnail && images && images.length > 0) {
-            // Embed a resized thumbnail at the end of the feed
+
+          // TODO: Remove this hack
+          var match = desc.match(/(<div.*)?<img src="([^"]+)" [^>]*>(.*<\/div>)?/)
+          if (match) {
+            desc = desc.replace(match[0],"")
+          }
+
+          if (options.thumbnail) {
             var width = Math.max(parseInt(options.thumbnail), 240);
-            var imgUrl = 'http://www.deltas.io/api/v1/stream_items/' + map.id + '/image?width='+width;
-            out.startElement('enclosure').writeAttribute('type','image/jpeg').
-                                          writeAttribute('url',imgUrl).
-                                            endElement();
+            if (images && images.length > 0) {
+              // Embed a resized thumbnail at the end of the feed
+              var imgUrl = 'http://www.deltas.io/api/v1/stream_items/' + map.id + '/image?width='+width;
+              out.startElement('enclosure').writeAttribute('type','image/jpeg').
+                                            writeAttribute('url',imgUrl).
+                                              endElement();
               desc = '<center><a href="' + map.url + '" ><img src="' + imgUrl + '" /></a></center><br />'+desc;
-            }          
-            out.startElement('description').text(desc).endElement();
+
+            }
+            else if (match) {
+              // Fall back on the image we extracted...
+              desc = '<center><a href="' + map.url + '" ><img src="' + match[2] + '" width="'+width+'" /></a></center><br />'+desc;
+            }
+          }
+          out.startElement('description').text(desc).endElement();
           out.endElement();
         }
         out.endDocument();
@@ -356,8 +377,8 @@ var Stream = Parse.Object.extend("Stream", {
           title = items[i].get('title'),
           sourceId = items[i].get('source').id;
       seen[sourceId] = seen[sourceId] || [];
-      if (seen[sourceId].indexOf(r) >= 0 || 
-          seen[sourceId].indexOf(url) >= 0 || 
+      if (seen[sourceId].indexOf(r) >= 0 ||
+          seen[sourceId].indexOf(url) >= 0 ||
           seen[sourceId].indexOf(title) >= 0) {
         dupes.push(items[i]);
         continue;

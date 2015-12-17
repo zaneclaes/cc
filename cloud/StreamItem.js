@@ -15,7 +15,12 @@ var StreamItem = Parse.Object.extend("StreamItem", {
   present: function(options) {
     options = options || {};
     var images = this.get('images'),
-        text = this.get('text') || '';
+        text = this.get('text') || '',
+        content = this.get('content'),
+        scheduledAt = this.get('scheduledAt');
+    if (options.publishedDate && content) {
+      scheduledAt = content.get('publishedDate');
+    }
     if (options.paragraphs) {
       text = text.split('</p>').slice(0, parseInt(options.paragraphs)).join('</p>');
     }
@@ -28,7 +33,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
       url : this.get('url'),
       host : this.get('host'),
       id : this.id,
-      scheduledAt : (this.get('scheduledAt') || new Date()).toUTCString(),
+      scheduledAt : (scheduledAt || new Date()).toUTCString(),
       imageUrl : images && images.length > 0 ? images[0].url : '',
     };
   },
@@ -231,7 +236,7 @@ var StreamItem = Parse.Object.extend("StreamItem", {
         }
         /* WUT? no relationship? We queried on it, it must exist...
         else {
-          // Build a new streamitem 
+          // Build a new streamitem
           built[relationship] = StreamItem.build(stream, delta, map[relationship], options);
           if (built[relationship]) {
           	ret.push(built[relationship]);
