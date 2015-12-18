@@ -148,7 +148,9 @@ var Stream = Parse.Object.extend("Stream", {
 
         if (options.order == 'scheduledAt') {
           items.sort(function(a,b){
-            return a.present(options).pubDate - b.present(options).pubDate;
+            var am = a.present(options);
+            var bm = b.present(options);
+            return new Date(bm.scheduledAt) - new Date(am.scheduledAt);
           });
         }
 
